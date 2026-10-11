@@ -1065,10 +1065,24 @@ body:has(dialog[open]) { overflow: hidden; }
 .sync-history[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .sync-history .card { border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; box-shadow: var(--shadow-xs); }
 .sync-preview-table { min-width: 1280px; }
-.sync-preview-table td { max-width: 260px; overflow-wrap: anywhere; }
+.sync-preview-table td { min-width: 120px; max-width: 260px; overflow-wrap: break-word; word-break: normal; }
+.sync-preview-table td.code,
+.sync-preview-table td.tnum,
+.sync-preview-table td.nowrap { min-width: 0; }
+.sync-preview-table td:nth-child(3),
+.sync-preview-table td:nth-child(6),
+.sync-preview-table td:nth-child(7),
+.sync-preview-table td:nth-child(8),
+.sync-preview-table td:nth-child(10) { min-width: 180px; }
 .sync-preview-table th:first-child,
 .sync-preview-table td:first-child { position: sticky; left: 0; z-index: 1; background: #fff; box-shadow: 1px 0 0 var(--line); }
 .sync-preview-table th:first-child { background: var(--surface-2); }
+@container dt (max-width: 760px) {
+	.sync-preview-table { min-width: 0; }
+	.sync-preview-table td { min-width: 0; max-width: none; overflow-wrap: anywhere; }
+	.sync-preview-table td:first-child { position: static; box-shadow: none; background: var(--surface-2); font-size: .9375rem; }
+	.sync-preview-table td:first-child::before { align-self: center; }
+}
 
 
 /* Letter list filters */

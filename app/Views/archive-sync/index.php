@@ -81,7 +81,7 @@ $connected = $provider['status'] === 'Terhubung';
         <?= ui_empty_state('inbox', 'Belum ada metadata surat', 'Belum ada metadata surat di Supabase.') ?>
     <?php else: ?>
         <div class="table-wrap">
-            <table class="data-table sync-preview-table">
+            <table class="data-table data-table--stack sync-preview-table">
                 <thead>
                 <tr><th>ID Pencarian</th><th>No Agenda</th><th>No Surat</th><th>Tanggal surat</th><th>Tanggal diterima</th><th>Surat dari</th><th>Pengusul</th><th>Hal</th><th>Sifat</th><th>Catatan</th><th>Disposisi</th><th>Status arsip</th><th>Dihapus dari internal</th><th>Link Drive</th></tr>
                 </thead>
@@ -99,17 +99,17 @@ $connected = $provider['status'] === 'Terhubung';
                     $isDeleted = !empty($item['is_deleted']);
                     ?>
                     <tr>
-                        <td class="code"><?= e($item['search_id'] ?? '-') ?></td>
-                        <td class="tnum"><?= (int) ($item['agenda_number'] ?? 0) ?></td>
-                        <td><?= e($item['letter_number'] ?? '-') ?></td>
-                        <td class="nowrap"><?= e(formatTanggal($item['letter_date'] ?? null)) ?></td>
-                        <td class="nowrap"><?= e(formatTanggal($item['received_date'] ?? null)) ?></td>
-                        <td><?= e($item['sender'] ?? '-') ?></td>
-                        <td><?= e($item['proposer'] ?? '-') ?></td>
-                        <td><?= e($item['hal'] ?? '-') ?></td>
-                        <td><?= e($item['nature'] ?: 'Tidak diisi') ?></td>
-                        <td><?= e($item['catatan'] ?? '-') ?></td>
-                        <td>
+                        <td class="code" data-label="ID Pencarian"><?= e($item['search_id'] ?? '-') ?></td>
+                        <td class="tnum" data-label="No Agenda"><?= (int) ($item['agenda_number'] ?? 0) ?></td>
+                        <td data-label="No Surat"><?= e($item['letter_number'] ?? '-') ?></td>
+                        <td class="nowrap" data-label="Tanggal surat"><?= e(formatTanggal($item['letter_date'] ?? null)) ?></td>
+                        <td class="nowrap" data-label="Tanggal diterima"><?= e(formatTanggal($item['received_date'] ?? null)) ?></td>
+                        <td data-label="Surat dari"><?= e($item['sender'] ?? '-') ?></td>
+                        <td data-label="Pengusul"><?= e($item['proposer'] ?? '-') ?></td>
+                        <td data-label="Hal"><?= e($item['hal'] ?? '-') ?></td>
+                        <td data-label="Sifat"><?= e($item['nature'] ?: 'Tidak diisi') ?></td>
+                        <td data-label="Catatan"><?= e($item['catatan'] ?? '-') ?></td>
+                        <td data-label="Disposisi">
                             <?php if ($dispositions): ?>
                                 <details class="inline-details">
                                     <summary><?= count($dispositions) ?> tahap</summary>
@@ -126,9 +126,9 @@ $connected = $provider['status'] === 'Terhubung';
                                 </details>
                             <?php else: ?>-<?php endif; ?>
                         </td>
-                        <td><?= $isDeleted ? ui_badge('Diarsipkan', 'warn') : ui_badge('Aktif', 'ok') ?></td>
-                        <td class="nowrap"><?= e($item['deleted_at'] ?? '-') ?></td>
-                        <td>
+                        <td data-label="Status arsip"><?= $isDeleted ? ui_badge('Diarsipkan', 'warn') : ui_badge('Aktif', 'ok') ?></td>
+                        <td class="nowrap" data-label="Dihapus dari internal"><?= e($item['deleted_at'] ?? '-') ?></td>
+                        <td data-label="Link Drive">
                             <?php if ($safeDriveUrl): ?>
                                 <a href="<?= e($safeDriveUrl) ?>" target="_blank" rel="noopener noreferrer">Buka Drive</a>
                             <?php else: ?>-<?php endif; ?>
