@@ -1,0 +1,13 @@
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{THE_REQUEST} \s/+public(?:/|\s) [NC]
+    RewriteRule ^public/ - [F,L,NC]
+    RewriteRule ^assets/(.*)$ public/assets/$1 [END]
+    RewriteRule ^.*$ public/index.php [QSA,END]
+</IfModule>
+
+<FilesMatch "^(\.env(\..*)?|composer\.(json|lock)|database\.sql|\.gitignore|AGENTS\.md|CLAUDE\.md|GEMINI\.md)$">
+    Require all denied
+</FilesMatch>
