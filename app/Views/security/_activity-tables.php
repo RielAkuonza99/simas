@@ -77,11 +77,13 @@
     <?php endif; ?>
 </section>
 
-<section class="card" aria-labelledby="audit-heading">
-    <div class="card__head">
+<details class="card change-log-details">
+    <summary class="card__head change-log-summary" aria-controls="change-log-content">
         <h3 class="card__title" id="audit-heading">Change log</h3>
         <span class="muted text-sm"><?= number_format($logs['total'], 0, ',', '.') ?> aktivitas</span>
-    </div>
+        <?= ui_icon('chevron-down') ?>
+    </summary>
+    <div id="change-log-content">
     <?php if (!$logs['items']): ?>
         <?= ui_empty_state('activity', 'Belum ada aktivitas', 'Aktivitas pengguna akan tercatat di sini.') ?>
     <?php else: ?>
@@ -119,4 +121,5 @@
             </div>
         </nav>
     <?php endif; ?>
-</section>
+    </div>
+</details>

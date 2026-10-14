@@ -1,27 +1,6 @@
 <?php
 declare(strict_types=1);
 
-set_exception_handler(static function (Throwable $error): void {
-    $logDirectory = APP_ROOT . '/storage/logs';
-    if (!is_dir($logDirectory)) {
-        mkdir($logDirectory, 0750, true);
-    }
-
-    error_log(
-        sprintf("[%s] %s in %s:%d\n%s\n", date(DATE_ATOM), $error->getMessage(), $error->getFile(), $error->getLine(), $error->getTraceAsString()),
-        3,
-        $logDirectory . '/app.log'
-    );
-
-    if (PHP_SAPI !== 'cli') {
-        while (ob_get_level() > 0) {
-            ob_end_clean();
-        }
-        http_response_code(500);
-        echo 'Terjadi kesalahan sistem.';
-    }
-});
-
 if (PHP_SAPI !== 'cli' && !headers_sent()) {
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: DENY');

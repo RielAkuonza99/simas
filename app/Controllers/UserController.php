@@ -18,10 +18,12 @@ final class UserController
         $pdo = Connection::get();
         $notice = $_SESSION['flash'] ?? null;
         unset($_SESSION['flash']);
+        $users = (new UserModel($pdo))->all();
 
         render('users/index', [
             'pageTitle' => 'Pengelolaan Pengguna',
-            'users' => (new UserModel($pdo))->all(),
+            'users' => $users,
+            'otherUsersCount' => max(0, count($users) - 1),
             'notice' => $notice,
         ]);
     }
@@ -40,7 +42,7 @@ final class UserController
             'pageTitle' => $user === null ? 'Tambah Pengguna' : 'Edit Pengguna',
             'userRecord' => $user,
             'errors' => [],
-            'formData' => $user ?? ['username' => '', 'role' => 'pelayanan', 'is_active' => 1],
+            'formData' => $user ?? ['username' => '', 'role' => 'pelayanan'],
         ]);
     }
 
@@ -53,6 +55,10 @@ final class UserController
         $pdo = Connection::get();
         $actorId = (int) currentUser()['id'];
         $input = $_POST;
+        $safeFormInput = [
+            'username' => is_string($_POST['username'] ?? null) ? trim($_POST['username']) : '',
+            'role' => is_string($_POST['role'] ?? null) ? $_POST['role'] : 'pelayanan',
+        ];
         if (isset($_GET['id']) && !isset($input['id'])) {
             $input['id'] = $_GET['id'];
         }
@@ -69,7 +75,7 @@ final class UserController
                 'pageTitle' => $user === null ? 'Tambah Pengguna' : 'Edit Pengguna',
                 'userRecord' => $user,
                 'errors' => [$error->getMessage()],
-                'formData' => array_merge($user ?? [], $_POST),
+                'formData' => array_merge($user ?? [], $safeFormInput),
             ]);
             return;
         }
@@ -80,7 +86,7 @@ final class UserController
                 'pageTitle' => $user === null ? 'Tambah Pengguna' : 'Edit Pengguna',
                 'userRecord' => $user,
                 'errors' => $result['errors'],
-                'formData' => array_merge($user ?? [], $_POST),
+                'formData' => array_merge($user ?? [], $safeFormInput),
             ]);
             return;
         }

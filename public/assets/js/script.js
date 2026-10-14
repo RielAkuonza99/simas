@@ -12,7 +12,7 @@
     const mobileQuery = window.matchMedia('(max-width: 1023.98px)');
 
     /* ---------- Toasts ---------- */
-    const toast = (message, { actionLabel = '', onAction = null, timeout = 6000 } = {}) => {
+    const toast = (message, { actionLabel = '', onAction = null, timeout = 5000 } = {}) => {
         const region = document.querySelector('[data-toast-region]');
         if (!region) return;
 
@@ -25,6 +25,20 @@
         item.append(text);
 
         const remove = () => item.remove();
+        const dismiss = (distance = 0) => {
+            if (distance !== 0) item.style.setProperty('--toast-swipe', `${distance > 0 ? '110%' : '-110%'}`);
+            item.classList.add('is-leaving');
+            window.setTimeout(remove, 180);
+        };
+        let pointerStart = null;
+        item.addEventListener('pointerdown', (event) => { pointerStart = event.clientX; });
+        item.addEventListener('pointerup', (event) => {
+            if (pointerStart === null) return;
+            const distance = event.clientX - pointerStart;
+            pointerStart = null;
+            if (Math.abs(distance) >= 60) dismiss(distance);
+        });
+        item.addEventListener('pointercancel', () => { pointerStart = null; });
         if (actionLabel && onAction) {
             const action = document.createElement('button');
             action.type = 'button';
@@ -37,7 +51,7 @@
             item.append(action);
         }
         region.append(item);
-        window.setTimeout(remove, timeout);
+        window.setTimeout(() => dismiss(), timeout);
     };
 
     /* ---------- Loading bar between pages ---------- */
@@ -182,16 +196,331 @@
 
     /* ---------- Account menu ---------- */
     const initAccountMenu = () => {
-        const menu = document.querySelector('.account-menu');
-        if (!menu) return;
+        const menus = document.querySelectorAll('.account-menu');
+        if (menus.length === 0) return;
         document.addEventListener('click', (event) => {
-            if (!menu.contains(event.target)) menu.open = false;
+            menus.forEach((menu) => { if (!menu.contains(event.target)) menu.open = false; });
         });
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && menu.open) {
+            if (event.key !== 'Escape') return;
+            menus.forEach((menu) => {
+                if (!menu.open) return;
                 menu.open = false;
                 menu.querySelector('summary')?.focus();
+            });
+        });
+    };
+
+    /* ---------- Cross-page notifications ---------- */
+    const initNotifications = () => {
+        const root = document.querySelector('[data-notification-menu]');
+        if (!root) return;
+        const list = root.querySelector('[data-notification-list]');
+        const count = root.querySelector('[data-notification-count]');
+        const unreadLabel = root.querySelector('[data-notification-unread-label]');
+        let refreshing = false;
+        const post = async (url, values = {}) => {
+            const body = new URLSearchParams({ csrf_token: root.dataset.csrf, ...values });
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                body,
+                credentials: 'same-origin',
+                cache: 'no-store',
+            });
+            if (!response.ok) throw new Error('notification_action_failed');
+            return response.json();
+        };
+        const actionButton = (label, callback, tone = 'secondary') => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = `btn btn-${tone} btn-sm`;
+            button.textContent = label;
+            button.addEventListener('click', callback);
+            return button;
+        };
+        const notificationPreview = (notification) => {
+            const sender = notification.sender_username ? ` dari ${notification.sender_username}` : '';
+            const letter = notification.surat_id ? ` untuk surat #${notification.surat_id}` : '';
+            if (notification.kind === 'EDIT_REQUEST') return `Permintaan edit${sender}${letter}`;
+            if (notification.kind === 'PENGAJUAN') return `Pengajuan baru${sender}${letter}`;
+            if (notification.kind === 'SURAT_BARU') return `Surat masuk baru${letter}`;
+            return `Notifikasi baru${sender}${letter}`;
+        };
+        const refresh = async () => {
+            if (refreshing) return;
+            refreshing = true;
+            try {
+                const response = await fetch(root.dataset.listUrl, {
+                    headers: { Accept: 'application/json' },
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                });
+                if (!response.ok) return;
+                const result = await response.json();
+                const items = Array.isArray(result.items) ? result.items : [];
+                const unread = items.filter((item) => Number(item.is_read) === 0);
+                if (count) {
+                    count.textContent = String(unread.length);
+                    count.hidden = unread.length === 0;
+                }
+                if (unreadLabel) unreadLabel.textContent = `${unread.length} belum dibaca`;
+                if (list) {
+                    list.replaceChildren();
+                    if (items.length === 0) {
+                        const empty = document.createElement('p');
+                        empty.className = 'notification-empty';
+                        empty.textContent = 'Belum ada notifikasi.';
+                        list.append(empty);
+                    }
+                    items.forEach((notification) => {
+                        const row = document.createElement('article');
+                        row.className = `notification-item${Number(notification.is_read) === 0 ? ' is-unread' : ''}`;
+                        row.setAttribute('role', 'listitem');
+                        const message = document.createElement('p');
+                        message.className = 'notification-item__message';
+                        message.textContent = notificationPreview(notification);
+                        row.append(message);
+                        if (notification.sender_username) {
+                            const sender = document.createElement('span');
+                            sender.className = 'notification-item__meta';
+                            sender.textContent = `Dari ${notification.sender_username}`;
+                            row.append(sender);
+                        }
+                        const actions = document.createElement('div');
+                        actions.className = 'notification-item__actions';
+                        const pendingEdit = notification.kind === 'EDIT_REQUEST' && notification.request_status === 'PENDING';
+                        if (pendingEdit && root.dataset.isAdmin === '1') {
+                            for (const [decision, label, tone] of [['approve', 'Setujui', 'primary'], ['reject', 'Tolak', 'quiet-danger']]) {
+                                actions.append(actionButton(label, async () => {
+                                    try {
+                                        await post(`${root.dataset.decisionBase}/${encodeURIComponent(notification.edit_request_id)}/keputusan`, { decision });
+                                        await refresh();
+                                    } catch { toast('Keputusan tidak dapat disimpan. Muat ulang halaman dan coba lagi.'); }
+                                }, tone));
+                            }
+                        }
+                        if (!pendingEdit) {
+                            const view = document.createElement('a');
+                            view.className = 'notification-item__link';
+                            view.href = `${root.dataset.historyUrl}?id=${encodeURIComponent(notification.id)}#notification-${encodeURIComponent(notification.id)}`;
+                            view.textContent = 'Buka detail notifikasi';
+                            actions.append(view);
+                        }
+                        row.append(actions);
+                        list.append(row);
+                    });
+                }
+                // Popup ditentukan server (per sesi login), jadi refresh halaman tidak mengulang popup.
+                const popup = Array.isArray(result.popup) ? result.popup : [];
+                popup.slice(0, 5).forEach((notification) => {
+                    toast(notificationPreview(notification), {
+                        timeout: 5000,
+                        actionLabel: 'Lihat',
+                        onAction: () => window.location.assign(`${root.dataset.historyUrl}?id=${encodeURIComponent(notification.id)}#notification-${encodeURIComponent(notification.id)}`),
+                    });
+                });
+            } catch {
+                // Keep the rest of the page usable when notification polling is unavailable.
+            } finally {
+                refreshing = false;
             }
+        };
+        refresh();
+        window.setInterval(() => {
+            if (!document.hidden) refresh();
+        }, 20000);
+        document.addEventListener('visibilitychange', refresh);
+    };
+
+    const initPostSaveConfirmation = () => {
+        const savedLetter = document.querySelector('[data-post-save-confirm]');
+        if (!savedLetter) return;
+        if (window.confirm('Surat berhasil disimpan. Buka detail surat sekarang?')) {
+            window.location.assign(savedLetter.dataset.detailUrl);
+        }
+    };
+
+    const initBulkSelection = () => {
+        const selectAll = document.querySelector('[data-select-all]');
+        const checkboxes = [...document.querySelectorAll('[data-select-letter]')];
+        const toolbar = document.querySelector('[data-bulk-actions]');
+        const selectedCount = document.querySelector('[data-selected-count]');
+        if (!selectAll || checkboxes.length === 0 || !toolbar) return;
+        const update = () => {
+            const selected = checkboxes.filter((checkbox) => checkbox.checked).length;
+            toolbar.hidden = selected === 0;
+            if (selectedCount) selectedCount.textContent = String(selected);
+            selectAll.checked = selected > 0 && selected === checkboxes.length;
+            selectAll.indeterminate = selected > 0 && selected < checkboxes.length;
+        };
+        selectAll.addEventListener('change', () => {
+            checkboxes.forEach((checkbox) => { checkbox.checked = selectAll.checked; });
+            update();
+        });
+        checkboxes.forEach((checkbox) => checkbox.addEventListener('change', update));
+        update();
+    };
+
+    const initExportDialog = () => {
+        const dialog = document.querySelector('[data-export-dialog]');
+        const openButton = document.querySelector('[data-export-open]');
+        const form = dialog?.querySelector('[data-export-form]');
+        const idField = dialog?.querySelector('[data-export-id]');
+        const searchButton = dialog?.querySelector('[data-export-search]');
+        const status = dialog?.querySelector('[data-export-search-status]');
+        const results = dialog?.querySelector('[data-export-results]');
+        const selectedList = dialog?.querySelector('[data-export-selected-list]');
+        const selectedCount = dialog?.querySelector('[data-export-selected-count]');
+        if (!dialog || !openButton || !form || !idField || !searchButton || !status || !results || !selectedList) return;
+
+        const selected = new Map();
+        const closeButtons = dialog.querySelectorAll('[data-export-close]');
+        const renderSelected = () => {
+            selectedList.replaceChildren();
+            if (selectedCount) selectedCount.textContent = String(selected.size);
+            if (selected.size === 0) {
+                const empty = document.createElement('li');
+                empty.className = 'export-empty';
+                empty.textContent = 'Belum ada surat dipilih.';
+                selectedList.append(empty);
+                return;
+            }
+
+            selected.forEach((letter, id) => {
+                const row = document.createElement('li');
+                row.className = 'export-selected__item';
+                const label = document.createElement('span');
+                label.textContent = `#${id} · B-${String(letter.no).padStart(4, '0')} · ${letter.surat_dari || 'Asal tidak diisi'}`;
+                const hiddenId = document.createElement('input');
+                hiddenId.type = 'hidden';
+                hiddenId.name = 'selected_ids[]';
+                hiddenId.value = String(id);
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'btn btn-secondary btn-sm';
+                remove.textContent = 'Lepas';
+                remove.setAttribute('aria-label', `Lepas surat #${id} dari ekspor`);
+                remove.addEventListener('click', () => {
+                    selected.delete(id);
+                    renderSelected();
+                    const checkbox = results.querySelector(`[data-export-result-id="${id}"]`);
+                    if (checkbox) checkbox.checked = false;
+                    status.textContent = `Surat #${id} dilepas dari daftar ekspor.`;
+                });
+                row.append(label, hiddenId, remove);
+                selectedList.append(row);
+            });
+        };
+
+        const search = async () => {
+            const id = idField.value.trim();
+            if (!/^[1-9]\d*$/.test(id)) {
+                status.textContent = 'Masukkan ID surat berupa angka positif.';
+                results.replaceChildren();
+                idField.focus();
+                return;
+            }
+
+            searchButton.disabled = true;
+            status.textContent = 'Mencari surat…';
+            results.replaceChildren();
+            try {
+                const searchUrl = new URL(dialog.dataset.searchUrl, window.location.href);
+                searchUrl.searchParams.set('id', id);
+                const response = await fetch(searchUrl, {
+                    headers: { Accept: 'application/json' },
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Pencarian surat gagal.');
+                const letter = result.item;
+                const item = document.createElement('li');
+                const label = document.createElement('label');
+                label.className = 'export-search-result';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = selected.has(Number(letter.id));
+                checkbox.setAttribute('data-export-result-id', String(letter.id));
+                checkbox.setAttribute('aria-label', `Pilih surat #${letter.id}`);
+                const text = document.createElement('span');
+                const heading = document.createElement('strong');
+                heading.textContent = `#${letter.id} · B-${String(letter.no).padStart(4, '0')}`;
+                const detail = document.createElement('small');
+                detail.textContent = `${letter.tanggal_masuk || 'Tanggal tidak diisi'} · ${letter.surat_dari || 'Asal tidak diisi'}`;
+                const subject = document.createElement('span');
+                subject.textContent = letter.hal || 'Hal surat tidak diisi';
+                text.append(heading, detail, subject);
+                label.append(checkbox, text);
+                item.append(label);
+                results.append(item);
+                checkbox.addEventListener('change', () => {
+                    const letterId = Number(letter.id);
+                    if (checkbox.checked && !selected.has(letterId) && selected.size >= 500) {
+                        checkbox.checked = false;
+                        status.textContent = 'Ekspor pilihan dibatasi maksimal 500 surat.';
+                        return;
+                    }
+                    if (checkbox.checked) selected.set(letterId, letter);
+                    else selected.delete(letterId);
+                    renderSelected();
+                    status.textContent = checkbox.checked ? 'Surat ditambahkan ke daftar ekspor.' : 'Surat dilepas dari daftar ekspor.';
+                });
+                status.textContent = 'Pilih surat ini untuk memasukkannya ke ekspor.';
+            } catch (error) {
+                status.textContent = error instanceof Error ? error.message : 'Pencarian surat gagal.';
+            } finally {
+                searchButton.disabled = false;
+            }
+        };
+
+        openButton.addEventListener('click', () => {
+            if (typeof dialog.showModal === 'function') dialog.showModal();
+            else dialog.setAttribute('open', '');
+            idField.focus();
+        });
+        closeButtons.forEach((button) => button.addEventListener('click', () => dialog.close()));
+        dialog.addEventListener('click', (event) => {
+            if (event.target === dialog) dialog.close();
+        });
+        form.addEventListener('submit', () => {
+            window.setTimeout(() => {
+                if (dialog.open) dialog.close();
+            }, 0);
+        });
+        searchButton.addEventListener('click', search);
+        idField.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                search();
+            }
+        });
+        renderSelected();
+    };
+
+    const initNotificationHistory = () => {
+        const root = document.querySelector('[data-notification-menu]');
+        const forms = document.querySelectorAll('[data-notification-review-form]');
+        if (!root || forms.length === 0) return;
+        forms.forEach((form) => {
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const body = new FormData(form);
+                try {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        headers: { Accept: 'application/json' },
+                        body,
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                    });
+                    if (!response.ok) throw new Error('decision_failed');
+                    window.location.reload();
+                } catch {
+                    toast('Keputusan tidak dapat disimpan. Muat ulang halaman dan coba lagi.');
+                }
+            });
         });
     };
 
@@ -348,7 +677,13 @@
             event.preventDefault();
 
             const title = form.dataset.confirmTitle || 'Yakin ingin melanjutkan?';
-            const message = form.dataset.confirmMessage || '';
+            let message = form.dataset.confirmMessage || '';
+            const confirmationField = form.dataset.confirmInput
+                ? form.querySelector(`[name="${form.dataset.confirmInput}"]`)
+                : null;
+            if (confirmationField && confirmationField.value.trim() !== '') {
+                message += `\n\nPesan yang akan dikirim:\n${confirmationField.value.trim()}`;
+            }
             const label = form.dataset.confirmLabel || 'Lanjutkan';
             const tone = form.dataset.confirmTone || 'danger';
             const submit = () => {
@@ -496,6 +831,20 @@
         if (!list || !addButton || !template) return;
 
         const countLabel = list.parentElement.querySelector('[data-disposition-count]');
+        const completionOptions = [...list.parentElement.querySelectorAll('.completion-option input[type="radio"]')];
+        const completionProof = list.parentElement.querySelector('[data-completion-proof]');
+        const completionRadios = list.parentElement.querySelectorAll('input[name="selesai_tahap"]');
+        const updateCompletionProof = () => {
+            const selected = list.parentElement.querySelector('input[name="selesai_tahap"]:checked');
+            const complete = selected && selected.value !== '0';
+            if (completionProof) {
+                completionProof.hidden = !complete;
+                if (!complete) {
+                    const field = completionProof.querySelector('input');
+                    if (field) field.value = '';
+                }
+            }
+        };
         const update = () => {
             const steps = [...list.querySelectorAll('[data-disposition-step]')];
             steps.forEach((step, index) => {
@@ -511,17 +860,39 @@
                     field.name = `disposisi[${stage}][${name}]`;
                     step.querySelector(`[data-disposition-label="${name}"]`).htmlFor = id;
                 });
+                step.querySelectorAll('[data-disposition-target]').forEach((field) => {
+                    const name = field.dataset.dispositionTarget;
+                    field.id = `d${stage}_${name}_${[...step.querySelectorAll('[data-disposition-target]')].indexOf(field) + 1}`;
+                    field.name = `disposisi[${stage}][${name}][]`;
+                });
             });
             addButton.disabled = steps.length >= 5;
+            completionOptions.forEach((option) => {
+                option.disabled = Number(option.value) > steps.length;
+                if (option.disabled && option.checked) {
+                    const pending = list.parentElement.querySelector('input[type="radio"][name="selesai_tahap"][value="0"]');
+                    if (pending) pending.checked = true;
+                }
+            });
             if (countLabel) countLabel.textContent = `${steps.length} dari 5 tahap`;
+            updateCompletionProof();
         };
+
+        completionRadios.forEach((radio) => radio.addEventListener('change', updateCompletionProof));
 
         list.addEventListener('click', (event) => {
             const removeButton = event.target.closest('[data-remove-disposition]');
             if (!removeButton) return;
             const step = removeButton.closest('[data-disposition-step]');
+            const removedStage = [...list.querySelectorAll('[data-disposition-step]')].indexOf(step) + 1;
+            const selectedCompletion = list.parentElement.querySelector('input[name="selesai_tahap"]:checked');
+            const previousCompletion = selectedCompletion?.value || '0';
             const following = step.nextElementSibling;
             step.remove();
+            if (Number(previousCompletion) >= removedStage) {
+                const pending = list.parentElement.querySelector('input[type="radio"][name="selesai_tahap"][value="0"]');
+                if (pending) pending.checked = true;
+            }
             update();
             toast('Tahap disposisi dihapus. Perubahan baru tersimpan setelah Anda menyimpan surat.', {
                 actionLabel: 'Urungkan',
@@ -530,6 +901,13 @@
                     if (list.querySelectorAll('[data-disposition-step]').length >= 5) return;
                     list.insertBefore(step, following && following.parentNode === list ? following : null);
                     update();
+                    if (Number(previousCompletion) > 0) {
+                        const restored = list.parentElement.querySelector(`input[name="selesai_tahap"][value="${previousCompletion}"]`);
+                        if (restored && !restored.disabled) {
+                            restored.checked = true;
+                            updateCompletionProof();
+                        }
+                    }
                 },
             });
         });
@@ -623,6 +1001,11 @@
         initLoadbar();
         initSidebar();
         initAccountMenu();
+        initNotifications();
+        initPostSaveConfirmation();
+        initBulkSelection();
+        initExportDialog();
+        initNotificationHistory();
         initSearchShortcut();
         initNetworkReadings();
         initDeveloperMetrics();

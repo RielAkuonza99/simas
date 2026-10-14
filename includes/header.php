@@ -12,7 +12,7 @@ $sidebarCollapsed = (($_COOKIE['bapperida_sidebar_collapsed'] ?? '') === '1');
     <title><?= e($pageTitle) ?> · Surat Masuk BAPPERIDA</title>
     <link rel="icon" type="image/svg+xml" href="<?= e(url('assets/img/icon.svg')) ?>">
     <link rel="preload" href="<?= e(url('assets/fonts/public-sans-latin-wght-normal.woff2')) ?>" as="font" type="font/woff2" crossorigin>
-    <link href="<?= e(url('assets/css/app.css?v=20')) ?>" rel="stylesheet">
+    <link href="<?= e(asset('css/app.css')) ?>" rel="stylesheet">
 </head>
 <body class="<?= isLoggedIn() ? 'is-app' : 'is-auth' ?>">
 <?php ui_sprite(); ?>

@@ -100,6 +100,18 @@ final class AuthMiddleware
         }
     }
 
+    public static function requireSuratCreator(): void
+    {
+        self::requireLogin();
+        if (!in_array(currentUser()['role'] ?? null, ['admin', 'pelayanan'], true)) {
+            (new AuditLogger(Connection::get()))->record('AUTHORIZATION_FAILURE', 'authorization', null, (int) currentUser()['id'], null, [
+                'required_roles' => ['admin', 'pelayanan'],
+            ]);
+            http_response_code(403);
+            exit('Anda tidak memiliki hak untuk menambahkan surat.');
+        }
+    }
+
     public static function clientIp(): ?string
     {
         $address = (string) ($_SERVER['REMOTE_ADDR'] ?? '');

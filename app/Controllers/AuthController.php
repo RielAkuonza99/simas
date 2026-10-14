@@ -36,13 +36,24 @@ final class AuthController
             validateCsrf();
 
             $remoteAddress = AuthMiddleware::clientIp() ?? 'unknown';
-            $identities = ['ip:' . $remoteAddress, 'account-ip:' . strtolower($username) . ':' . $remoteAddress];
-            foreach ($identities as $identity) {
-                if ($this->rateLimiter->isBlocked($identity)) {
-                    http_response_code(429);
-                    $error = 'Terlalu banyak percobaan login. Silakan coba lagi beberapa saat.';
-                    break;
+            $identities = ['ip:' . $remoteAddress];
+            if ($username !== '' && strlen($username) <= 50) {
+                $normalizedUsername = strtolower($username);
+                $identities[] = 'account-ip:' . $normalizedUsername . ':' . $remoteAddress;
+                $identities[] = 'account:' . $normalizedUsername;
+            }
+            try {
+                foreach ($identities as $identity) {
+                    if ($this->rateLimiter->isBlocked($identity)) {
+                        http_response_code(429);
+                        $error = 'Terlalu banyak percobaan login. Silakan coba lagi beberapa saat.';
+                        break;
+                    }
                 }
+            } catch (\Throwable $exception) {
+                error_log('Login rate limiter unavailable: ' . $exception->getMessage());
+                http_response_code(503);
+                $error = 'Login sementara tidak tersedia. Silakan coba lagi nanti.';
             }
 
             if ($error === '' && ($username === '' || strlen($username) > 50 || (string) ($_POST['password'] ?? '') === '')) {
@@ -50,16 +61,28 @@ final class AuthController
             } elseif ($error === '') {
                 $password = (string) $_POST['password'];
                 if ($this->auth->authenticate($username, $password)) {
-                    foreach ($identities as $identity) {
-                        $this->rateLimiter->clear($identity);
+                    try {
+                        foreach ($identities as $identity) {
+                            $this->rateLimiter->clear($identity);
+                        }
+                    } catch (\Throwable $exception) {
+                        error_log('Login rate limiter could not clear successful attempt: ' . $exception->getMessage());
                     }
                     redirect('dashboard');
                 }
 
-                foreach ($identities as $identity) {
-                    $this->rateLimiter->recordFailure($identity);
+                try {
+                    foreach ($identities as $identity) {
+                        $this->rateLimiter->recordFailure($identity);
+                    }
+                } catch (\Throwable $exception) {
+                    error_log('Login rate limiter unavailable: ' . $exception->getMessage());
+                    http_response_code(503);
+                    $error = 'Login sementara tidak tersedia. Silakan coba lagi nanti.';
                 }
-                $error = 'Username atau password salah.';
+                if ($error === '') {
+                    $error = 'Username atau password salah.';
+                }
             }
         }
 

@@ -38,15 +38,65 @@ function app_early_log(string $message): void
     );
 }
 
-set_exception_handler(static function (Throwable $error): void {
-    app_early_log(sprintf("%s in %s:%d\n%s", $error->getMessage(), $error->getFile(), $error->getLine(), $error->getTraceAsString()));
+function app_render_error_page(int $statusCode, string $referenceId = ''): void
+{
+    $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '/');
+    $requestPath = parse_url($requestUri, PHP_URL_PATH);
+    $requestPath = is_string($requestPath) ? str_replace(["\r", "\n", "\0"], '', $requestPath) : '/';
+    $requestMethod = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    $requestMethod = preg_replace('/[^A-Z0-9_-]/', '', $requestMethod) ?: 'UNKNOWN';
+    $occurredAt = date(DATE_ATOM);
+    $homeUrl = defined('APP_BASE_URL') ? APP_BASE_URL . '/' : '/';
+    $logPath = APP_ROOT . '/storage/logs/app.log';
+    $escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $template = $statusCode === 404 ? '404.php' : '500.php';
+
+    if (PHP_SAPI !== 'cli' && !headers_sent()) {
+        header('Content-Type: text/html; charset=utf-8');
+        header('Cache-Control: no-store, private');
+        if ($referenceId !== '') {
+            header('X-Request-ID: ' . $referenceId);
+        }
+    }
+
+    http_response_code($statusCode);
+    require APP_ROOT . '/app/Views/errors/' . $template;
+}
+
+function app_handle_exception(Throwable $error): void
+{
+    try {
+        $referenceId = strtoupper(bin2hex(random_bytes(6)));
+    } catch (Throwable) {
+        $referenceId = strtoupper(substr(hash('sha256', uniqid('', true)), 0, 12));
+    }
+
+    $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '/');
+    $requestPath = parse_url($requestUri, PHP_URL_PATH);
+    $requestPath = is_string($requestPath) ? str_replace(["\r", "\n", "\0"], '', $requestPath) : '/';
+    $requestMethod = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'CLI'));
+    $requestMethod = preg_replace('/[^A-Z0-9_-]/', '', $requestMethod) ?: 'UNKNOWN';
+    app_early_log(sprintf(
+        "ERROR ref=%s request=%s %s\n%s in %s:%d\n%s",
+        $referenceId,
+        $requestMethod,
+        $requestPath,
+        $error->getMessage(),
+        $error->getFile(),
+        $error->getLine(),
+        $error->getTraceAsString()
+    ));
+
     if (PHP_SAPI !== 'cli') {
         while (ob_get_level() > 0) {
             ob_end_clean();
         }
-        http_response_code(500);
-        echo 'Terjadi kesalahan sistem.';
+        app_render_error_page(500, $referenceId);
     }
+}
+
+set_exception_handler(static function (Throwable $error): void {
+    app_handle_exception($error);
 });
 
 register_shutdown_function(static function (): void {

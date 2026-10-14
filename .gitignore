@@ -1,4 +1,12 @@
 .env
+.env.*
+/vendor/
+*.pem
+*.key
+*.p12
+*.pfx
+*.ppk
+*.jks
 /storage/logs/*
 /storage/private/*
 /database/backups/*

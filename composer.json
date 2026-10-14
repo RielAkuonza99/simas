@@ -1,0 +1,9 @@
+{
+    "name": "bapperida/simas",
+    "description": "Aplikasi internal Sistem Informasi Surat Masuk BAPPERIDA.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "dompdf/dompdf": "^3.1.6"
+    }
+}

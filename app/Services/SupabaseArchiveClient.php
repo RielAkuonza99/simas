@@ -46,7 +46,7 @@ final class SupabaseArchiveClient
             ]);
         }
 
-        $columns = 'search_id,agenda_number,letter_number,letter_date,received_date,sender,proposer,nature,hal,catatan,drive_url,dispositions,is_deleted,deleted_at,archived_at';
+        $columns = 'letter_id,search_id,agenda_number,letter_number,letter_date,received_date,sender,nature,hal,drive_url,completion_stage,completion_status,completion_actor,completion_date,completion_recorded_by,completion_recorded_at,completion_drive_url,dispositions,is_deleted,deleted_at,archived_at';
         $query = http_build_query([
             'select' => $columns,
             'order' => 'received_date.desc,search_id.asc',
@@ -135,6 +135,78 @@ final class SupabaseArchiveClient
             'message' => $items === [] ? 'Belum ada metadata pada tabel Supabase.' : 'Metadata terbaru berhasil dibaca dari Supabase.',
             'items' => $items,
         ];
+    }
+
+    public function exportMetadata(): array
+    {
+        if (!$this->isConfigured()) {
+            throw new RuntimeException('Konfigurasi Supabase belum siap untuk ekspor.');
+        }
+
+        $columns = 'letter_id,search_id,agenda_number,letter_number,letter_date,received_date,sender,nature,hal,drive_url,completion_stage,completion_status,completion_actor,completion_date,completion_recorded_by,completion_recorded_at,completion_drive_url,dispositions,is_deleted,deleted_at,archived_at';
+        $items = [];
+        $pageSize = 1000;
+        $maxRows = 100000;
+        $offset = 0;
+        while ($offset < $maxRows) {
+            $query = http_build_query([
+                'select' => $columns,
+                'order' => 'search_id.asc',
+                'limit' => $pageSize,
+            ], '', '&', PHP_QUERY_RFC3986);
+            $handle = curl_init($this->baseUrl . '/rest/v1/' . rawurlencode($this->table) . '?' . $query);
+            if ($handle === false) {
+                throw new RuntimeException('Ekspor metadata tidak dapat dimulai.');
+            }
+            $rangeEnd = $offset + $pageSize - 1;
+            $contentRange = '';
+            curl_setopt_array($handle, [
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . $this->apiKey,
+                    'Authorization: Bearer ' . $this->apiKey,
+                    'Accept: application/json',
+                    'Range-Unit: items',
+                    'Range: ' . $offset . '-' . $rangeEnd,
+                    'Prefer: count=exact',
+                ],
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_TIMEOUT => 20,
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_HEADERFUNCTION => static function ($curl, string $line) use (&$contentRange): int {
+                    if (stripos($line, 'Content-Range:') === 0) {
+                        $contentRange = trim(substr($line, strlen('Content-Range:')));
+                    }
+                    return strlen($line);
+                },
+            ]);
+
+            $response = curl_exec($handle);
+            $statusCode = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+            curl_close($handle);
+            if ($statusCode === 416 && $offset > 0) {
+                return $items;
+            }
+            if ($response === false || $statusCode < 200 || $statusCode >= 300) {
+                throw new RuntimeException('Supabase gagal mengirim data ekspor.');
+            }
+            $page = json_decode($response, true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($page) || !array_is_list($page)) {
+                throw new RuntimeException('Format data ekspor Supabase tidak valid.');
+            }
+            if ($page === []) {
+                return $items;
+            }
+            $items = array_merge($items, $page);
+            $offset += count($page);
+            if (preg_match('/\/(\d+)$/', $contentRange, $match) === 1 && (int) $match[1] <= $offset) {
+                return $items;
+            }
+        }
+
+        throw new RuntimeException('Ekspor dibatasi sampai 100.000 baris per unduhan.');
     }
 
     /**

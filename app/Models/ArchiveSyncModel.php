@@ -15,9 +15,13 @@ final class ArchiveSyncModel
     public function enqueueUpsert(int $suratId, bool $isDeleted = false): void
     {
         $statement = $this->pdo->prepare(
-            'SELECT kode_pencarian, no, nomor_surat, tanggal_surat, tanggal_masuk,
-                sifat, surat_dari, pengusul, hal, catatan, link_drive
-             FROM surat_masuk WHERE id = :id FOR UPDATE'
+            'SELECT s.id AS surat_id, s.kode_pencarian, s.no, s.nomor_surat, s.tanggal_surat, s.tanggal_masuk,
+                     s.sifat, s.surat_dari, s.hal, s.link_drive, s.selesai_tahap, s.selesai_pada,
+                     s.link_selesai, u.username AS selesai_oleh_nama, d.asal AS pejabat_akhir,
+                     d.tanggal AS tanggal_disposisi_akhir
+             FROM surat_masuk s LEFT JOIN users u ON u.id = s.selesai_oleh
+                 LEFT JOIN surat_disposisi d ON d.surat_id = s.id AND d.tahap = s.selesai_tahap
+             WHERE s.id = :id FOR UPDATE'
         );
         $statement->execute(['id' => $suratId]);
         $surat = $statement->fetch();
@@ -26,12 +30,13 @@ final class ArchiveSyncModel
         }
 
         $disposisi = $this->pdo->prepare(
-            'SELECT tahap, asal, tujuan, tanggal, catatan, link_lampiran
+            'SELECT tahap, asal, tujuan, tanggal, catatan
              FROM surat_disposisi WHERE surat_id = :id ORDER BY tahap'
         );
         $disposisi->execute(['id' => $suratId]);
 
         $payload = [
+            'letter_id' => (int) $surat['surat_id'],
             'search_id' => $surat['kode_pencarian'],
             'agenda_number' => (int) $surat['no'],
             'nature' => $surat['sifat'],
@@ -39,20 +44,25 @@ final class ArchiveSyncModel
             'letter_date' => $surat['tanggal_surat'],
             'received_date' => $surat['tanggal_masuk'],
             'sender' => $surat['surat_dari'],
-            'proposer' => $surat['pengusul'],
             'hal' => $surat['hal'],
-            'catatan' => $surat['catatan'],
             'drive_url' => $surat['link_drive'],
+            'completion_stage' => (int) $surat['selesai_tahap'],
+            'completion_status' => (int) $surat['selesai_tahap'] > 0
+                ? 'Selesai disposisi ke-' . (int) $surat['selesai_tahap'] : 'Belum selesai',
+            'completion_actor' => $surat['pejabat_akhir'],
+            'completion_date' => $surat['tanggal_disposisi_akhir'],
+            'completion_recorded_by' => $surat['selesai_oleh_nama'],
+            'completion_recorded_at' => $surat['selesai_pada'],
+            'completion_drive_url' => $surat['link_selesai'],
             'is_deleted' => $isDeleted,
             'deleted_at' => $isDeleted ? gmdate('Y-m-d\TH:i:s\Z') : null,
             'dispositions' => array_map(
                 static fn (array $row): array => [
                     'stage' => (int) $row['tahap'],
-                    'from' => $row['asal'],
-                    'to' => $row['tujuan'],
+                    'official' => $row['asal'],
+                    'targets' => $row['tujuan'] === null ? [] : array_map('trim', explode(',', $row['tujuan'])),
                     'date' => $row['tanggal'],
                     'catatan' => $row['catatan'],
-                    'attachment_url' => $row['link_lampiran'],
                 ],
                 $disposisi->fetchAll()
             ),

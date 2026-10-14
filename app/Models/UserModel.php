@@ -37,10 +37,21 @@ final class UserModel
     public function all(): array
     {
         $statement = $this->pdo->query(
-            'SELECT id, username, role, is_active, created_at, updated_at FROM users ORDER BY username, id'
+            'SELECT u.id, u.username, u.role, u.is_active, u.created_at, u.updated_at,
+                    (SELECT MAX(s.last_seen_at) FROM auth_sessions s
+                      WHERE s.user_id = u.id AND s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP()) AS last_seen_at
+             FROM users u ORDER BY u.username, u.id'
         );
+        $users = $statement->fetchAll();
+        // last_seen_at hanya diperbarui tiap 5 menit (AuthSessionModel::touch), jadi jendela "sedang login" 10 menit.
+        $threshold = time() - 600;
+        foreach ($users as &$user) {
+            $seen = $user['last_seen_at'] !== null ? strtotime($user['last_seen_at'] . ' UTC') : false;
+            $user['is_online'] = $seen !== false && $seen >= $threshold;
+        }
+        unset($user);
 
-        return $statement->fetchAll();
+        return $users;
     }
 
     public function countActiveAdministrators(?int $exceptId = null): int
@@ -85,6 +96,11 @@ final class UserModel
             $this->pdo->beginTransaction();
         }
         try {
+            $lockedUsers = $this->pdo->query('SELECT id FROM users ORDER BY id FOR UPDATE')->fetchAll(PDO::FETCH_COLUMN);
+            $otherUsers = count(array_filter($lockedUsers, static fn ($id): bool => (int) $id !== (int) $actorId));
+            if ($otherUsers >= 5) {
+                throw new DomainException('Maksimal lima akun selain administrator yang sedang digunakan.');
+            }
             $this->pdo->query("SELECT id FROM users WHERE role = 'admin' AND is_active = 1 FOR UPDATE")->fetchAll();
             $statement = $this->pdo->prepare(
                 'INSERT INTO users (username, password, role, is_active)

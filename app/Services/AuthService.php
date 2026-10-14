@@ -107,7 +107,7 @@ final class AuthService
         setcookie('bapperida_device', $token, [
             'expires' => $expiresAt,
             'path' => '/',
-            'secure' => APP_ENVIRONMENT !== 'local',
+            'secure' => self::requestIsHttps() || APP_ENVIRONMENT !== 'local',
             'httponly' => true,
             'samesite' => 'Strict',
         ]);
@@ -118,9 +118,15 @@ final class AuthService
         setcookie('bapperida_device', '', [
             'expires' => time() - 3600,
             'path' => '/',
-            'secure' => APP_ENVIRONMENT !== 'local',
+            'secure' => self::requestIsHttps() || APP_ENVIRONMENT !== 'local',
             'httponly' => true,
             'samesite' => 'Strict',
         ]);
+    }
+
+    private static function requestIsHttps(): bool
+    {
+        return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
     }
 }

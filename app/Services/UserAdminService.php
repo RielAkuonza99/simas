@@ -20,14 +20,18 @@ final class UserAdminService
 
     public function save(array $input, int $actorId): array
     {
-        $id = filter_var($input['id'] ?? '', FILTER_VALIDATE_INT);
-        $id = $id === false ? null : (int) $id;
-        $username = trim((string) ($input['username'] ?? ''));
-        $password = (string) ($input['password'] ?? '');
-        $role = (string) ($input['role'] ?? 'pelayanan');
-        $active = (string) ($input['is_active'] ?? '0') === '1';
+        $rawId = $input['id'] ?? null;
+        $id = $rawId === null || $rawId === '' ? null : filter_var($rawId, FILTER_VALIDATE_INT);
+        $username = is_string($input['username'] ?? null) ? trim($input['username']) : '';
+        $password = is_string($input['password'] ?? null) ? $input['password'] : '';
+        $role = is_string($input['role'] ?? null) ? $input['role'] : (array_key_exists('role', $input) ? '' : 'pelayanan');
         $errors = [];
+        if ($id === false) {
+            return ['errors' => ['ID pengguna tidak valid.'], 'id' => null];
+        }
+        $id = $id === null ? null : (int) $id;
         $existing = $id === null ? null : $this->users->find($id);
+        $active = $existing === null ? true : (int) $existing['is_active'] === 1;
 
         if ($id !== null && $existing === null) {
             return ['errors' => ['Akun yang dipilih tidak ditemukan.'], 'id' => null];

@@ -3,6 +3,7 @@ require APP_ROOT . '/includes/header.php';
 require APP_ROOT . '/includes/sidebar.php';
 
 $isAdminUser = (currentUser()['role'] ?? '') === 'admin';
+$canCreate = in_array(currentUser()['role'] ?? '', ['admin', 'pelayanan'], true);
 $hasFilters = $filters['q'] !== '' || $filters['dari'] !== '' || $filters['sampai'] !== '';
 $firstPage = $pagination['total'] === 0 ? 0 : (($pagination['page'] - 1) * $pagination['perPage']) + 1;
 $lastPage = min($pagination['page'] * $pagination['perPage'], $pagination['total']);
@@ -23,12 +24,15 @@ $chip = static function (string $label, string $removeKey) use ($filters): strin
         <h2 class="page-title">Daftar Surat Masuk</h2>
         <p class="page-sub"><?= number_format($pagination['total'], 0, ',', '.') ?> surat<?= $hasFilters ? ' sesuai filter' : '' ?>.</p>
     </div>
-    <?php if ($isAdminUser): ?>
+    <?php if ($canCreate): ?>
         <div class="page-actions">
+            <?php if ($isAdminUser): ?><button class="btn btn-secondary" type="button" data-export-open><?= ui_icon('external') ?>Ekspor</button><?php endif; ?>
             <a class="btn btn-primary" href="<?= e(url('surat/tambah')) ?>"><?= ui_icon('plus') ?>Tambah Surat</a>
         </div>
     <?php endif; ?>
 </div>
+<?= ui_alert($notice) ?>
+<?php if ($savedSuratId > 0): ?><div data-post-save-confirm="<?= $savedSuratId ?>" data-detail-url="<?= e(url('surat/' . $savedSuratId)) ?>" hidden></div><?php endif; ?>
 
 <form class="card card__body filter-card" method="get" action="<?= e(url('surat')) ?>" role="search">
     <div class="filter-grid">
@@ -36,7 +40,7 @@ $chip = static function (string $label, string $removeKey) use ($filters): strin
             <label class="label" for="q">Cari surat</label>
             <div class="input-icon">
                 <?= ui_icon('search') ?>
-                <input id="q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" maxlength="200" placeholder="ID BAPPERIDA, agenda, nomor, pengirim, pengusul, hal" data-search-shortcut>
+                <input id="q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" maxlength="200" placeholder="ID surat, agenda, nomor, asal, atau hal" data-search-shortcut>
             </div>
         </div>
         <div class="field">
@@ -62,6 +66,19 @@ $chip = static function (string $label, string $removeKey) use ($filters): strin
     <?php endif; ?>
 </form>
 
+<?php if ($isAdminUser): ?>
+    <form id="bulk-delete-form" method="post" action="<?= e(url('surat/hapus-terpilih')) ?>"
+          data-confirm data-confirm-title="Hapus surat terpilih?"
+          data-confirm-message="Surat yang dipilih beserta disposisinya akan dihapus dan perubahan arsip akan disinkronkan. Tindakan ini tidak dapat dibatalkan."
+          data-confirm-label="Hapus surat" data-confirm-tone="danger">
+        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+    </form>
+    <div class="bulk-toolbar" data-bulk-actions role="status" aria-live="polite" hidden>
+        <span><strong data-selected-count>0</strong> surat dipilih</span>
+        <button class="btn btn-quiet-danger" type="submit" form="bulk-delete-form"><?= ui_icon('trash') ?>Hapus terpilih</button>
+    </div>
+<?php endif; ?>
+
 <section class="card list-card" aria-label="Daftar surat masuk">
 <?php if (!$data): ?>
     <?php if ($hasFilters): ?>
@@ -75,8 +92,8 @@ $chip = static function (string $label, string $removeKey) use ($filters): strin
         <?= ui_empty_state(
             'inbox',
             'Belum ada surat masuk',
-            $isAdminUser ? 'Administrator dapat menambahkan surat pertama.' : 'Hubungi administrator untuk menambahkan surat.',
-            $isAdminUser ? '<a class="btn btn-primary" href="' . e(url('surat/tambah')) . '">' . ui_icon('plus') . 'Tambah Surat</a>' : ''
+            $canCreate ? 'Tambahkan surat masuk pertama.' : 'Hubungi administrator untuk menambahkan surat.',
+            $canCreate ? '<a class="btn btn-primary" href="' . e(url('surat/tambah')) . '">' . ui_icon('plus') . 'Tambah Surat</a>' : ''
         ) ?>
     <?php endif; ?>
 <?php else: ?>
@@ -84,8 +101,9 @@ $chip = static function (string $label, string $removeKey) use ($filters): strin
         <table class="data-table data-table--cards surat-list-table">
             <thead>
                 <tr>
-                    <th>ID Pencarian / Agenda</th><th>Hal</th><th>Surat Dari / Pengusul</th><th>TGL Diterima</th>
-                    <th>Disposisi</th><th>Google Drive</th><th class="col-act">Aksi</th>
+                    <?php if ($isAdminUser): ?><th class="bulk-select-cell"><label class="bulk-selection-control"><input type="checkbox" data-select-all><span class="sr-only">Pilih semua surat di halaman</span></label></th><?php endif; ?>
+                    <th>ID Surat / No Agenda</th><th>Hal Surat</th><th>Asal Surat</th><th>Diterima</th>
+                    <th>Disposisi akhir</th><th>Bukti Dukung</th><th class="col-act">Aksi</th>
                 </tr>
             </thead>
             <tbody>
@@ -95,9 +113,10 @@ $chip = static function (string $label, string $removeKey) use ($filters): strin
                 $halShort = mb_strimwidth((string) ($surat['ringkas'] ?: ''), 0, 90, '…');
                 ?>
                 <tr>
+                    <?php if ($isAdminUser): ?><td class="bulk-select-cell" data-label="Pilih"><label class="bulk-selection-control"><input type="checkbox" form="bulk-delete-form" name="ids[]" value="<?= (int) $surat['id'] ?>" data-select-letter><span class="sr-only">Pilih surat #<?= (int) $surat['id'] ?></span></label></td><?php endif; ?>
                     <td class="c-id">
-                        <span class="code"><?= e($surat['kode_pencarian'] ?: '-') ?></span>
-                        <span class="cell-sub">Agenda <?= (int) $surat['no'] ?></span>
+                        <span class="code">#<?= (int) $surat['id'] ?></span>
+                        <span class="cell-sub">B-<?= str_pad((string) $surat['no'], 4, '0', STR_PAD_LEFT) ?></span>
                     </td>
                     <td class="c-hal">
                         <a class="hal-link" href="<?= e($detailUrl) ?>"><?= e($surat['ringkas'] ?: '-') ?></a>
@@ -106,21 +125,31 @@ $chip = static function (string $label, string $removeKey) use ($filters): strin
                     </td>
                     <td class="c-from">
                         <span class="cell-primary"><?= e($surat['surat_dari'] ?: '-') ?></span>
-                        <?php if (!empty($surat['pengusul'])): ?><span class="cell-sub">Pengusul: <?= e($surat['pengusul']) ?></span><?php endif; ?>
                     </td>
                     <td class="c-date nowrap"><?= e(formatTanggal($surat['tanggal_masuk'])) ?></td>
-                    <td class="c-disp"><?= ui_disposisi_meter((int) $surat['jumlah_disposisi']) ?></td>
+                    <td class="c-disp">
+                        <?php if ((int) $surat['selesai_tahap'] > 0): ?>
+                            <?= ui_badge('Selesai disposisi ' . (int) $surat['selesai_tahap'], 'ok', true) ?>
+                            <?php if (!empty($surat['pejabat_akhir'])): ?><span class="cell-sub"><?= e($surat['pejabat_akhir']) ?></span><?php endif; ?>
+                        <?php else: ?><?= ui_badge('Belum selesai', 'neutral', true) ?><?php endif; ?>
+                    </td>
                     <td class="c-doc">
                         <?php if ($surat['driveUrl']): ?>
-                            <a class="btn btn-secondary btn-sm" href="<?= e($surat['driveUrl']) ?>" target="_blank" rel="noopener noreferrer" title="Buka di Google Drive"><?= ui_icon('external') ?>Drive</a>
+                            <a class="btn btn-secondary btn-sm" href="<?= e($surat['driveUrl']) ?>" target="_blank" rel="noopener noreferrer" title="Buka bukti dukung di Google Drive"><?= ui_icon('external') ?>Buka</a>
                         <?php else: ?>
-                            <span class="muted text-sm" title="Belum ada tautan Google Drive">Belum ada tautan</span>
+                            <span class="muted text-sm" title="Belum ada bukti dukung">Belum ada</span>
                         <?php endif; ?>
                     </td>
                     <td class="c-act col-act">
                         <div class="row-actions">
-                            <a class="btn btn-secondary btn-sm" href="<?= e($detailUrl) ?>" title="Detail" aria-label="Detail surat <?= e($surat['kode_pencarian']) ?>"><?= ui_icon('eye') ?><span class="btn-label">Detail</span></a>
-                            <a class="btn btn-secondary btn-sm" href="<?= e(url('surat/' . (int) $surat['id'] . '/edit')) ?>" title="Edit" aria-label="Edit surat <?= e($surat['kode_pencarian']) ?>"><?= ui_icon('pencil') ?><span class="btn-label">Edit</span></a>
+                            <a class="btn btn-secondary btn-sm" href="<?= e($detailUrl) ?>" title="Detail" aria-label="Detail surat #<?= (int) $surat['id'] ?>"><?= ui_icon('eye') ?><span class="btn-label">Detail</span></a>
+                            <?php if (isset($approvedEditSuratIds[(int) $surat['id']])): ?>
+                                <a class="btn btn-primary btn-sm" href="<?= e(url('surat/' . (int) $surat['id'] . '/edit')) ?>" title="Telah dikonfirmasi" aria-label="Edit surat #<?= (int) $surat['id'] ?>, telah dikonfirmasi">
+                                    <?= ui_icon('pencil') ?><span class="btn-label">Edit surat #<?= (int) $surat['id'] ?></span>
+                                </a>
+                            <?php else: ?>
+                                <a class="btn btn-secondary btn-sm" href="<?= e(url('surat/' . (int) $surat['id'] . '/edit')) ?>" title="Edit" aria-label="Edit surat #<?= (int) $surat['id'] ?>"><?= ui_icon('pencil') ?><span class="btn-label">Edit</span></a>
+                            <?php endif; ?>
                             <?php if ($isAdminUser): ?>
                                 <form method="post" action="<?= e(url('surat/' . (int) $surat['id'] . '/hapus')) ?>"
                                       data-confirm
@@ -170,5 +199,46 @@ $chip = static function (string $label, string $removeKey) use ($filters): strin
             <?php endif; ?>
         </div>
     </nav>
+<?php endif; ?>
+<?php if ($isAdminUser): ?>
+    <dialog class="dialog export-dialog" data-export-dialog data-search-url="<?= e(url('surat/ekspor/cari')) ?>" aria-labelledby="export-dialog-title">
+        <header class="export-dialog__head">
+            <div><h2 class="dialog__title" id="export-dialog-title">Ekspor surat</h2><p class="field-hint">Pilih rentang waktu atau cari surat berdasarkan ID.</p></div>
+            <button class="icon-btn" type="button" data-export-close aria-label="Tutup ekspor" title="Tutup"><?= ui_icon('x') ?></button>
+        </header>
+        <form method="post" action="<?= e(url('surat/ekspor')) ?>" data-export-form>
+            <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+            <div class="export-dialog__body">
+                <fieldset class="export-period">
+                    <legend class="label">Rentang waktu surat diterima</legend>
+                    <div class="export-period__choices">
+                        <label><input type="radio" name="range" value="week" checked><span>Minggu ini</span></label>
+                        <label><input type="radio" name="range" value="month"><span>Bulan ini</span></label>
+                        <label><input type="radio" name="range" value="year"><span>Tahun ini</span></label>
+                        <label><input type="radio" name="range" value="all"><span>Seluruhnya</span></label>
+                    </div>
+                </fieldset>
+                <p class="export-dialog__hint">Surat yang dipilih berdasarkan ID akan diekspor tanpa mengikuti rentang waktu.</p>
+                <div class="field">
+                    <label class="label" for="export-letter-id">Cari ID surat</label>
+                    <div class="export-id-search">
+                        <input class="input" type="number" id="export-letter-id" min="1" step="1" inputmode="numeric" placeholder="Contoh: 125" data-export-id>
+                        <button class="btn btn-secondary" type="button" data-export-search><?= ui_icon('search') ?>Cari surat</button>
+                    </div>
+                </div>
+                <p class="export-search-status" data-export-search-status role="status" aria-live="polite"></p>
+                <ul class="export-search-results" data-export-results aria-label="Hasil pencarian surat"></ul>
+                <section class="export-selected" aria-labelledby="export-selected-title">
+                    <div class="export-selected__head"><h3 id="export-selected-title">Surat terpilih</h3><span data-export-selected-count>0</span></div>
+                    <ul class="export-selected__list" data-export-selected-list></ul>
+                </section>
+            </div>
+            <footer class="export-dialog__actions">
+                <button class="btn btn-secondary" type="button" data-export-close>Batal</button>
+                <button class="btn btn-secondary" type="submit" formaction="<?= e(url('surat/ekspor')) ?>" name="format" value="csv"><?= ui_icon('file-text') ?>Simpan CSV</button>
+                <button class="btn btn-primary" type="submit" formaction="<?= e(url('surat/ekspor/pdf')) ?>" name="format" value="pdf"><?= ui_icon('file-text') ?>Simpan PDF</button>
+            </footer>
+        </form>
+    </dialog>
 <?php endif; ?>
 <?php require APP_ROOT . '/includes/footer.php'; ?>

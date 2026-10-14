@@ -9,6 +9,7 @@ use App\Security\AuditLogger;
 final class SuratService
 {
     public const SIFAT = ['Sangat Segera', 'Segera', 'Rahasia'];
+    public const TUJUAN_DISPOSISI = ['Kasubbag umum', 'Seketariat', 'Kepala'];
     private const DRIVE_HOSTS = ['drive.google.com', 'docs.google.com'];
 
     public function __construct(private SuratModel $surat, private AuditLogger $audit)
@@ -43,13 +44,13 @@ final class SuratService
             'tanggal_masuk' => date('Y-m-d'),
             'sifat' => '',
             'surat_dari' => '',
-            'pengusul' => '',
             'hal' => '',
-            'catatan' => '',
             'link_drive' => '',
+            'selesai_tahap' => 0,
+            'link_selesai' => '',
             'disposisi' => array_fill_keys(
                 SuratModel::DISPOSISI_DEFAULT_TAHAP,
-                ['asal' => '', 'tujuan' => '', 'tanggal' => '', 'catatan' => '', 'link_lampiran' => '']
+                ['pejabat' => '', 'tujuan' => [], 'tanggal' => '', 'catatan' => '']
             ),
         ];
     }
@@ -57,23 +58,27 @@ final class SuratService
     public function formFromRecord(array $surat): array
     {
         $form = $this->emptyForm();
-        foreach (['nomor_surat', 'tanggal_surat', 'tanggal_masuk', 'sifat', 'surat_dari', 'pengusul', 'hal', 'catatan', 'link_drive'] as $field) {
+        foreach (['nomor_surat', 'tanggal_surat', 'tanggal_masuk', 'sifat', 'surat_dari', 'hal', 'link_drive'] as $field) {
             $form[$field] = (string) ($surat[$field] ?? $form[$field]);
         }
+        $form['selesai_tahap'] = (int) ($surat['selesai_tahap'] ?? 0);
+        $form['link_selesai'] = (string) ($surat['link_selesai'] ?? '');
         $stages = array_unique(array_merge(
             SuratModel::DISPOSISI_DEFAULT_TAHAP,
             array_map('intval', array_keys($surat['disposisi'] ?? []))
         ));
         sort($stages);
-        $form['disposisi'] = array_fill_keys($stages, ['asal' => '', 'tujuan' => '', 'tanggal' => '', 'catatan' => '', 'link_lampiran' => '']);
+        $form['disposisi'] = array_fill_keys($stages, ['pejabat' => '', 'tujuan' => [], 'tanggal' => '', 'catatan' => '']);
 
         foreach ($surat['disposisi'] ?? [] as $tahap => $row) {
             $form['disposisi'][$tahap] = [
-                'asal' => (string) ($row['asal'] ?? ''),
-                'tujuan' => (string) ($row['tujuan'] ?? ''),
+                'pejabat' => (string) ($row['pejabat'] ?? $row['asal'] ?? ''),
+                'tujuan' => array_values(array_intersect(
+                    self::TUJUAN_DISPOSISI,
+                    array_map('trim', explode(',', (string) ($row['tujuan'] ?? '')))
+                )),
                 'tanggal' => (string) ($row['tanggal'] ?? ''),
                 'catatan' => (string) ($row['catatan'] ?? ''),
-                'link_lampiran' => (string) ($row['link_lampiran'] ?? ''),
             ];
         }
 
@@ -93,10 +98,10 @@ final class SuratService
             'tanggal_masuk' => $text('tanggal_masuk'),
             'sifat' => $text('sifat'),
             'surat_dari' => $text('surat_dari'),
-            'pengusul' => $text('pengusul'),
             'hal' => $text('hal'),
-            'catatan' => $text('catatan'),
             'link_drive' => $text('link_drive'),
+            'selesai_tahap' => 0,
+            'link_selesai' => $text('link_selesai'),
             'disposisi' => [],
         ];
         $errors = [];
@@ -117,16 +122,15 @@ final class SuratService
         foreach (
             [
                 ['nomor_surat', 100, 'Nomor surat'],
-                ['surat_dari', 255, 'Surat dari'],
-                ['pengusul', 255, 'Pengusul'],
+                ['surat_dari', 255, 'Asal surat'],
             ] as [$field, $max, $label]
         ) {
             if (mb_strlen($data[$field]) > $max) {
                 $errors[] = "{$label} maksimal {$max} karakter.";
             }
         }
-        if (strlen($data['hal']) > 65535 || strlen($data['catatan']) > 65535) {
-            $errors[] = 'Hal dan catatan tidak boleh melebihi batas penyimpanan.';
+        if (strlen($data['hal']) > 65535) {
+            $errors[] = 'Hal surat tidak boleh melebihi batas penyimpanan.';
         }
 
         if ($data['link_drive'] !== '' && !$this->validDriveUrl($data['link_drive'])) {
@@ -138,25 +142,41 @@ final class SuratService
             $errors[] = 'Disposisi maksimal 5 tahap.';
         }
         $previousDate = '';
-        foreach (array_slice(array_values($submittedDisposisi), 0, count(SuratModel::DISPOSISI_TAHAP)) as $slot) {
-            $tahap = count($data['disposisi']) + 1;
+        foreach (SuratModel::DISPOSISI_TAHAP as $tahap) {
+            $slot = $submittedDisposisi[$tahap] ?? [];
             $slot = is_array($slot) ? $slot : [];
-            $row = [];
-            foreach (['asal' => 150, 'tujuan' => 150, 'tanggal' => 10, 'catatan' => 65535, 'link_lampiran' => 500] as $field => $max) {
-                $value = $slot[$field] ?? '';
-                $row[$field] = is_scalar($value) ? trim((string) $value) : '';
-                if ($field !== 'tanggal' && $field !== 'catatan' && mb_strlen($row[$field]) > $max) {
-                    $errors[] = "Disposisi {$tahap}: {$field} maksimal {$max} karakter.";
+            $row = [
+                'pejabat' => is_scalar($slot['pejabat'] ?? $slot['asal'] ?? null)
+                    ? trim((string) ($slot['pejabat'] ?? $slot['asal'] ?? '')) : '',
+                'tanggal' => is_scalar($slot['tanggal'] ?? null) ? trim((string) $slot['tanggal']) : '',
+                'catatan' => is_scalar($slot['catatan'] ?? null) ? trim((string) $slot['catatan']) : '',
+                'tujuan' => [],
+            ];
+            if (mb_strlen($row['pejabat']) > 150) {
+                $errors[] = "Disposisi {$tahap}: pejabat maksimal 150 karakter.";
+            }
+            if (strlen($row['catatan']) > 65535) {
+                $errors[] = "Catatan disposisi {$tahap} terlalu panjang.";
+            }
+
+            $targets = $slot['tujuan'] ?? [];
+            if (!is_array($targets)) {
+                $targets = is_scalar($targets) ? [(string) $targets] : [];
+            }
+            if (count($targets) > 5) {
+                $errors[] = "Disposisi {$tahap}: pilih maksimal 5 tujuan.";
+            }
+            foreach ($targets as $target) {
+                if (!is_string($target) || !in_array($target, self::TUJUAN_DISPOSISI, true)) {
+                    $errors[] = "Disposisi {$tahap}: tujuan tidak tersedia.";
+                    continue;
                 }
-                if ($field === 'catatan' && strlen($row[$field]) > $max) {
-                    $errors[] = "Catatan disposisi {$tahap} terlalu panjang.";
+                if (!in_array($target, $row['tujuan'], true)) {
+                    $row['tujuan'][] = $target;
                 }
             }
 
-            if ($row['link_lampiran'] !== '' && !$this->validDriveUrl($row['link_lampiran'])) {
-                $errors[] = "Lampiran disposisi {$tahap} harus berupa tautan Google Drive yang valid.";
-            }
-            if (!array_filter($row, static fn (string $value): bool => $value !== '')) {
+            if ($row['pejabat'] === '' && $row['tujuan'] === [] && $row['tanggal'] === '' && $row['catatan'] === '') {
                 continue;
             }
 
@@ -170,6 +190,24 @@ final class SuratService
                 }
             }
             $data['disposisi'][$tahap] = $row;
+        }
+
+        $completedStage = filter_var($input['selesai_tahap'] ?? 0, FILTER_VALIDATE_INT);
+        if ($completedStage === false || $completedStage < 0 || $completedStage > 5) {
+            $errors[] = 'Tahap disposisi selesai tidak valid.';
+        } else {
+            $data['selesai_tahap'] = $completedStage;
+            if ($completedStage > 0
+                && (!isset($data['disposisi'][$completedStage])
+                    || $data['disposisi'][$completedStage]['pejabat'] === ''
+                    || $data['disposisi'][$completedStage]['tujuan'] === []
+                    || $data['disposisi'][$completedStage]['tanggal'] === '')
+            ) {
+                $errors[] = 'Isi pejabat, tujuan, dan tanggal disposisi sebelum menandainya selesai.';
+            }
+        }
+        if ($data['link_selesai'] !== '' && ($data['selesai_tahap'] === 0 || !$this->validDriveUrl($data['link_selesai']))) {
+            $errors[] = 'Bukti dukung akhir hanya dapat diisi setelah disposisi selesai dengan tautan Google Drive yang valid.';
         }
 
         return [$data, $errors];
@@ -197,6 +235,18 @@ final class SuratService
         }
 
         return $deleted;
+    }
+    
+    public function deleteMany(array $ids): array
+    {
+        $deletedIds = $this->surat->deleteMany($ids);
+        if ($deletedIds !== []) {
+            $this->audit->record('BULK_DELETE', 'surat_masuk', null, (int) $_SESSION['user_id'], null, [
+                'deleted_ids' => $deletedIds,
+            ]);
+        }
+        
+        return $deletedIds;
     }
 
     private function validDriveUrl(string $url): bool

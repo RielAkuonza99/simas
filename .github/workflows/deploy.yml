@@ -7,6 +7,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: dom, gd, mbstring
+      - name: Install PHP dependencies
+        run: composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
       - uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -17,12 +23,24 @@ jobs:
             **/.git*
             **/.git*/**
             .env
+            **/.env*
+            **/*.pem
+            **/*.key
+            **/*.p12
+            **/*.pfx
+            **/*.ppk
+            **/*.jks
+            **/*secret*
+            **/*credential*
+            **/*private-key*
             .gemini/**
             .claude/**
             .agents/**
             .opencode/**
             anti-slop/**
             database/**
+            github/**
             storage/logs/**
             storage/private/**
+            *.sql
             *.md

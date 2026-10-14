@@ -39,13 +39,6 @@ $isEditing = $userRecord !== null;
                     <option value="admin" <?= ($formData['role'] ?? '') === 'admin' ? 'selected' : '' ?>>Administrator</option>
                 </select>
             </div>
-            <div class="field c-6">
-                <label class="label" for="is_active">Status akun <span class="req" aria-hidden="true">*</span></label>
-                <select class="select" id="is_active" name="is_active" required>
-                    <option value="1" <?= (string) ($formData['is_active'] ?? '1') === '1' ? 'selected' : '' ?>>Aktif</option>
-                    <option value="0" <?= (string) ($formData['is_active'] ?? '') === '0' ? 'selected' : '' ?>>Nonaktif</option>
-                </select>
-            </div>
         </div>
     </div>
     <div class="form-actions">

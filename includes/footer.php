@@ -19,6 +19,6 @@
     </div>
 </dialog>
 <div class="toast-region" data-toast-region aria-live="polite" aria-atomic="false"></div>
-<script src="<?= e(url('assets/js/script.js?v=20')) ?>"></script>
+<script src="<?= e(asset('js/script.js')) ?>"></script>
 </body>
 </html>

@@ -69,8 +69,8 @@ final class Router
             exit('Metode permintaan tidak diizinkan.');
         }
 
-        http_response_code(404);
-        exit('Halaman tidak ditemukan.');
+        app_render_error_page(404);
+        exit;
     }
 
     private function add(string $method, string $path, callable $handler): void

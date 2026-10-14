@@ -2,7 +2,6 @@
 require APP_ROOT . '/includes/header.php';
 require APP_ROOT . '/includes/sidebar.php';
 
-$rawDriveLink = trim((string) ($surat['link_drive'] ?? ''));
 $isAdminUser = (currentUser()['role'] ?? '') === 'admin';
 $halShort = mb_strimwidth((string) ($surat['hal'] ?? ''), 0, 90, '…');
 ?>
@@ -11,14 +10,14 @@ $halShort = mb_strimwidth((string) ($surat['hal'] ?? ''), 0, 90, '…');
 <div class="page-head">
     <div class="page-head__main">
         <div class="page-meta">
-            <span class="code"><?= e($surat['kode_pencarian'] ?: '-') ?></span>
+            <span class="code">#<?= (int) $surat['id'] ?></span>
             <?= sifatBadge($surat['sifat']) ?>
         </div>
-        <h2 class="page-title">Surat Masuk #<?= (int) $surat['no'] ?></h2>
+        <h2 class="page-title">Surat Masuk B-<?= str_pad((string) $surat['no'], 4, '0', STR_PAD_LEFT) ?></h2>
     </div>
     <div class="page-actions">
         <?php if ($driveUrl): ?>
-            <a class="btn btn-secondary" href="<?= e($driveUrl) ?>" target="_blank" rel="noopener noreferrer"><?= ui_icon('external') ?>Buka Google Drive</a>
+            <a class="btn btn-secondary" href="<?= e($driveUrl) ?>" target="_blank" rel="noopener noreferrer"><?= ui_icon('external') ?>Bukti Dukung</a>
         <?php endif; ?>
         <a class="btn btn-primary" href="<?= e(url('surat/' . (int) $id . '/edit')) ?>"><?= ui_icon('pencil') ?>Edit</a>
         <?php if ($isAdminUser): ?>
@@ -38,29 +37,32 @@ $halShort = mb_strimwidth((string) ($surat['hal'] ?? ''), 0, 90, '…');
 
 <div class="detail-layout">
     <div>
-        <section class="card" aria-labelledby="isi-heading">
-            <div class="card__head"><h3 class="card__title" id="isi-heading">Isi Surat</h3></div>
-            <div class="card__body text-blocks">
-                <div>
-                    <div class="text-label">Hal</div>
-                    <div class="lead-text"><?= $surat['hal'] ? nl2br(e($surat['hal'])) : '-' ?></div>
-                </div>
-                <div>
-                    <div class="text-label">Pengusul</div>
-                    <div class="text-value"><?= $surat['pengusul'] ? nl2br(e($surat['pengusul'])) : '-' ?></div>
-                </div>
-                <div>
-                    <div class="text-label">Catatan</div>
-                    <div class="text-value"><?= $surat['catatan'] ? nl2br(e($surat['catatan'])) : '-' ?></div>
-                </div>
-            </div>
+        <section class="card" aria-labelledby="agenda-heading">
+            <div class="card__head"><h3 class="card__title" id="agenda-heading">Agenda Surat</h3></div>
+            <dl class="card__body kv">
+                <div><dt>ID Surat</dt><dd class="code">#<?= (int) $surat['id'] ?></dd></div>
+                <div><dt>No Agenda</dt><dd class="code">B-<?= str_pad((string) $surat['no'], 4, '0', STR_PAD_LEFT) ?></dd></div>
+                <div><dt>Tanggal Surat Diterima</dt><dd><?= e(formatTanggal($surat['tanggal_masuk'])) ?></dd></div>
+            </dl>
+        </section>
+
+        <section class="card" aria-labelledby="info-heading">
+            <div class="card__head"><h3 class="card__title" id="info-heading">Informasi Surat</h3></div>
+            <dl class="card__body kv">
+                <div><dt>Asal Surat</dt><dd><?= e($surat['surat_dari'] ?: '-') ?></dd></div>
+                <div><dt>No Surat</dt><dd><?= e($surat['nomor_surat'] ?: '-') ?></dd></div>
+                <div><dt>Tanggal Surat</dt><dd><?= e(formatTanggal($surat['tanggal_surat'])) ?></dd></div>
+                <div><dt>Sifat Surat</dt><dd><?= e($surat['sifat'] ?: 'Tidak diisi') ?></dd></div>
+                <div class="kv__wide"><dt>Hal Surat</dt><dd><?= $surat['hal'] ? nl2br(e($surat['hal'])) : '-' ?></dd></div>
+                <div><dt>Bukti Dukung</dt><dd><?php if ($driveUrl): ?><a href="<?= e($driveUrl) ?>" target="_blank" rel="noopener noreferrer">Buka Google Drive</a><?php else: ?>Belum ada<?php endif; ?></dd></div>
+            </dl>
         </section>
 
         <section class="card" aria-labelledby="disposisi-heading">
             <div class="card__head">
                 <div>
                     <h3 class="card__title" id="disposisi-heading">Disposisi</h3>
-                    <p class="card__desc">Alur penerusan surat, dari tahap awal hingga terakhir.</p>
+                    <p class="card__desc">Pejabat, tujuan, tanggal, dan catatan setiap tahap.</p>
                 </div>
                 <?= ui_disposisi_meter(count($surat['disposisi'])) ?>
             </div>
@@ -91,6 +93,13 @@ $halShort = mb_strimwidth((string) ($surat['hal'] ?? ''), 0, 90, '…');
                                     <?php if ($disposisi['driveUrl']): ?>
                                         <a class="btn btn-secondary btn-sm" href="<?= e($disposisi['driveUrl']) ?>" target="_blank" rel="noopener noreferrer"><?= ui_icon('paperclip') ?>Buka lampiran</a>
                                     <?php endif; ?>
+                                    <?php if ((int) $surat['selesai_tahap'] === (int) $tahap): ?>
+                                        <div class="completion-summary">
+                                            <?= ui_badge('Disposisi akhir', 'ok', true) ?>
+                                            <span class="cell-sub">Pejabat <?= e($disposisi['asal'] ?: '-') ?> · <?= e(formatTanggal($disposisi['tanggal'])) ?></span>
+                                            <?php if ($completionDriveUrl): ?><a class="btn btn-secondary btn-sm" href="<?= e($completionDriveUrl) ?>" target="_blank" rel="noopener noreferrer"><?= ui_icon('external') ?>Bukti dukung akhir</a><?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
                             </li>
                         <?php endforeach; ?>
@@ -101,50 +110,34 @@ $halShort = mb_strimwidth((string) ($surat['hal'] ?? ''), 0, 90, '…');
     </div>
 
     <div>
-        <section class="card" aria-labelledby="dokumen-heading">
-            <div class="card__head"><h3 class="card__title" id="dokumen-heading">Dokumen</h3></div>
+        <section class="card" aria-label="Status disposisi akhir">
+            <div class="card__head"><h3 class="card__title">Status disposisi</h3></div>
             <div class="card__body">
-                <?php if ($driveUrl): ?>
-                    <div class="doc-state">
-                        <span class="doc-state__icon"><?= ui_icon('file-text') ?></span>
-                        <div>
-                            <strong>Link Google Drive</strong>
-                            <p>Link Google Drive tersedia. Gunakan tombol Buka Google Drive di bagian atas halaman.</p>
-                        </div>
-                    </div>
-                <?php elseif ($rawDriveLink !== ''): ?>
-                    <div class="doc-state doc-state--invalid">
-                        <span class="doc-state__icon"><?= ui_icon('alert-triangle') ?></span>
-                        <div>
-                            <strong>Link Google Drive</strong>
-                            <p>Link tersimpan tidak valid. Periksa atau perbarui data surat.</p>
-                            <a class="btn btn-secondary" href="<?= e(url('surat/' . (int) $id . '/edit')) ?>"><?= ui_icon('pencil') ?>Perbarui link</a>
-                        </div>
-                    </div>
+                <?php if ((int) $surat['selesai_tahap'] > 0): ?>
+                    <?= ui_badge('Selesai di disposisi ' . (int) $surat['selesai_tahap'], 'ok', true) ?>
                 <?php else: ?>
-                    <div class="doc-state doc-state--missing">
-                        <span class="doc-state__icon"><?= ui_icon('file-text') ?></span>
-                        <div>
-                            <strong>Link Google Drive</strong>
-                            <p>Belum ada link Google Drive.</p>
-                        </div>
-                    </div>
+                    <?= ui_badge('Belum selesai', 'neutral', true) ?>
                 <?php endif; ?>
             </div>
         </section>
-
-        <section class="card" aria-labelledby="info-heading">
-            <div class="card__head"><h3 class="card__title" id="info-heading">Informasi Surat</h3></div>
-            <dl class="card__body kv">
-                <div><dt>No Agenda</dt><dd class="tnum"><?= (int) $surat['no'] ?></dd></div>
-                <div><dt>ID Pencarian</dt><dd class="code"><?= e($surat['kode_pencarian'] ?: '-') ?></dd></div>
-                <div><dt>No Surat</dt><dd><?= e($surat['nomor_surat'] ?: '-') ?></dd></div>
-                <div><dt>TGL Surat</dt><dd><?= e(formatTanggal($surat['tanggal_surat'])) ?></dd></div>
-                <div><dt>TGL Diterima</dt><dd><?= e(formatTanggal($surat['tanggal_masuk'])) ?></dd></div>
-                <div><dt>Sifat</dt><dd><?= e($surat['sifat'] ?: 'Tidak diisi') ?></dd></div>
-                <div><dt>Surat Dari</dt><dd><?= e($surat['surat_dari'] ?: '-') ?></dd></div>
-            </dl>
-        </section>
+        <?php if ((currentUser()['role'] ?? '') === 'pelayanan'): ?>
+            <section class="card" aria-labelledby="submission-heading">
+                <div class="card__head"><h3 class="card__title" id="submission-heading">Pengajuan</h3></div>
+                <div class="card__body">
+                      <form method="post" action="<?= e(url('surat/' . (int) $id . '/pengajuan')) ?>" data-validate
+                          data-confirm data-confirm-title="Kirim pengajuan?"
+                          data-confirm-message="Pastikan pesan sudah benar. Pesan akan dikirim ke administrator."
+                          data-confirm-input="message" data-confirm-label="Kirim pengajuan" data-confirm-tone="neutral">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
+                        <div class="field">
+                            <label class="label" for="submission-message">Pesan untuk administrator</label>
+                            <textarea class="textarea" id="submission-message" name="message" rows="3" maxlength="500" placeholder="Contoh: Surat sudah diperbarui, menunggu arahan." required></textarea>
+                        </div>
+                        <div class="form-actions"><button class="btn btn-secondary" type="submit">Kirim Pengajuan</button></div>
+                    </form>
+                </div>
+            </section>
+        <?php endif; ?>
     </div>
 </div>
 <?php require APP_ROOT . '/includes/footer.php'; ?>

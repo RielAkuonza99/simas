@@ -17,6 +17,7 @@ $connected = $provider['status'] === 'Terhubung';
         <h2 class="page-title">Sinkronisasi metadata arsip</h2>
         <p class="page-sub">Kirim snapshot surat internal ke Supabase. Metadata yang sudah tersimpan tetap dipertahankan saat surat di internal dihapus.</p>
     </div>
+    <div class="page-actions"><a class="btn btn-secondary" href="<?= e(url('sinkronisasi/ekspor')) ?>"><?= ui_icon('external') ?>Ekspor CSV eksternal</a></div>
 </div>
 
 <?= ui_alert($notice) ?>
@@ -83,7 +84,7 @@ $connected = $provider['status'] === 'Terhubung';
         <div class="table-wrap">
             <table class="data-table data-table--stack sync-preview-table">
                 <thead>
-                <tr><th>ID Pencarian</th><th>No Agenda</th><th>No Surat</th><th>Tanggal surat</th><th>Tanggal diterima</th><th>Surat dari</th><th>Pengusul</th><th>Hal</th><th>Sifat</th><th>Catatan</th><th>Disposisi</th><th>Status arsip</th><th>Dihapus dari internal</th><th>Link Drive</th></tr>
+                <tr><th>ID Surat</th><th>ID Arsip</th><th>No Agenda</th><th>No Surat</th><th>Tanggal surat</th><th>Tanggal diterima</th><th>Asal surat</th><th>Hal</th><th>Sifat</th><th>Disposisi</th><th>Status akhir</th><th>Pejabat akhir</th><th>Tanggal akhir</th><th>Dihapus dari internal</th><th>Bukti dukung</th></tr>
                 </thead>
                 <tbody>
                 <?php foreach ($provider['items'] as $item): ?>
@@ -93,22 +94,23 @@ $connected = $provider['status'] === 'Terhubung';
                     $safeDriveUrl = is_array($driveParts)
                         && strtolower((string) ($driveParts['scheme'] ?? '')) === 'https'
                         && in_array(strtolower((string) ($driveParts['host'] ?? '')), ['drive.google.com', 'docs.google.com'], true)
+                        && !isset($driveParts['user'])
+                        && !isset($driveParts['pass'])
                         ? $driveUrl
                         : null;
                     $dispositions = is_array($item['dispositions'] ?? null) ? $item['dispositions'] : [];
                     $isDeleted = !empty($item['is_deleted']);
                     ?>
                     <tr>
-                        <td class="code" data-label="ID Pencarian"><?= e($item['search_id'] ?? '-') ?></td>
+                        <td data-label="ID Surat">#<?= (int) ($item['letter_id'] ?? 0) ?></td>
+                        <td class="code" data-label="ID Arsip"><?= e($item['search_id'] ?? '-') ?></td>
                         <td class="tnum" data-label="No Agenda"><?= (int) ($item['agenda_number'] ?? 0) ?></td>
                         <td data-label="No Surat"><?= e($item['letter_number'] ?? '-') ?></td>
                         <td class="nowrap" data-label="Tanggal surat"><?= e(formatTanggal($item['letter_date'] ?? null)) ?></td>
                         <td class="nowrap" data-label="Tanggal diterima"><?= e(formatTanggal($item['received_date'] ?? null)) ?></td>
-                        <td data-label="Surat dari"><?= e($item['sender'] ?? '-') ?></td>
-                        <td data-label="Pengusul"><?= e($item['proposer'] ?? '-') ?></td>
+                        <td data-label="Asal surat"><?= e($item['sender'] ?? '-') ?></td>
                         <td data-label="Hal"><?= e($item['hal'] ?? '-') ?></td>
                         <td data-label="Sifat"><?= e($item['nature'] ?: 'Tidak diisi') ?></td>
-                        <td data-label="Catatan"><?= e($item['catatan'] ?? '-') ?></td>
                         <td data-label="Disposisi">
                             <?php if ($dispositions): ?>
                                 <details class="inline-details">
@@ -116,17 +118,18 @@ $connected = $provider['status'] === 'Terhubung';
                                     <ol>
                                         <?php foreach ($dispositions as $disposition): ?>
                                             <li>
-                                                <?= e($disposition['from'] ?? '-') ?> ke <?= e($disposition['to'] ?? '-') ?>
+                                                <?= e($disposition['official'] ?? '-') ?> ke <?= e(is_array($disposition['targets'] ?? null) ? implode(', ', $disposition['targets']) : '-') ?>
                                                 <?php if (!empty($disposition['date'])): ?>, <?= e(formatTanggal($disposition['date'])) ?><?php endif; ?>
                                                 <?php if (!empty($disposition['catatan'])): ?><div><?= e($disposition['catatan']) ?></div><?php endif; ?>
-                                                <?php if (!empty($disposition['attachment_url'])): ?><div class="muted">Lampiran: <?= e($disposition['attachment_url']) ?></div><?php endif; ?>
                                             </li>
                                         <?php endforeach; ?>
                                     </ol>
                                 </details>
                             <?php else: ?>-<?php endif; ?>
                         </td>
-                        <td data-label="Status arsip"><?= $isDeleted ? ui_badge('Diarsipkan', 'warn') : ui_badge('Aktif', 'ok') ?></td>
+                        <td data-label="Status akhir"><?= e($item['completion_status'] ?? 'Belum selesai') ?></td>
+                        <td data-label="Pejabat akhir"><?= e($item['completion_actor'] ?? '-') ?></td>
+                        <td class="nowrap" data-label="Tanggal akhir"><?= e(formatTanggal($item['completion_date'] ?? null)) ?></td>
                         <td class="nowrap" data-label="Dihapus dari internal"><?= e($item['deleted_at'] ?? '-') ?></td>
                         <td data-label="Link Drive">
                             <?php if ($safeDriveUrl): ?>

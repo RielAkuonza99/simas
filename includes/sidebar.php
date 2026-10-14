@@ -6,7 +6,9 @@ $isAdmin = ($currentUser['role'] ?? '') === 'admin';
 $isUserPage = str_starts_with($activePath, '/pengguna');
 $isSyncPage = $activePath === '/sinkronisasi';
 $isSettingsPage = $activePath === '/pengaturan' || $activePath === '/aktivitas';
+$isFaqPage = $activePath === '/panduan';
 $isAddPage = $activePath === '/surat/tambah';
+$canCreateSurat = in_array($currentUser['role'] ?? '', ['admin', 'pelayanan'], true);
 $username = (string) ($currentUser['username'] ?? '');
 $navLink = static fn (bool $active): string => 'nav-link' . ($active ? ' active' : '');
 $navCurrent = static fn (bool $active): string => $active ? ' aria-current="page"' : '';
@@ -20,7 +22,7 @@ $navCurrent = static fn (bool $active): string => $active ? ' aria-current="page
     </div>
 
     <nav class="nav" id="primary-navigation" aria-label="Navigasi utama">
-        <?php if ($isAdmin): ?>
+        <?php if ($canCreateSurat): ?>
             <a class="nav-cta" href="<?= e(url('surat/tambah')) ?>" title="Tambah Surat"<?= $navCurrent($isAddPage) ?>>
                 <?= ui_icon('plus', 'nav-icon') ?><span>Tambah Surat</span>
             </a>
@@ -32,6 +34,12 @@ $navCurrent = static fn (bool $active): string => $active ? ' aria-current="page
             </a>
             <a class="<?= $navLink($isSuratPage && !$isAddPage) ?>" href="<?= e(url('surat')) ?>" title="Surat Masuk"<?= $navCurrent($isSuratPage && !$isAddPage) ?>>
                 <?= ui_icon('inbox', 'nav-icon') ?><span>Surat Masuk</span>
+            </a>
+            <a class="<?= $navLink($activePath === '/riwayat-disposisi') ?>" href="<?= e(url('riwayat-disposisi')) ?>" title="Riwayat Disposisi"<?= $navCurrent($activePath === '/riwayat-disposisi') ?>>
+                <?= ui_icon('activity', 'nav-icon') ?><span>Riwayat Disposisi</span>
+            </a>
+            <a class="<?= $navLink($isFaqPage) ?>" href="<?= e(url('panduan')) ?>" title="Panduan"<?= $navCurrent($isFaqPage) ?>>
+                <?= ui_icon('help-circle', 'nav-icon') ?><span>Panduan</span>
             </a>
         </div>
 
@@ -67,12 +75,31 @@ $navCurrent = static fn (bool $active): string => $active ? ' aria-current="page
             <form class="topbar-search" method="get" action="<?= e(url('surat')) ?>" role="search">
                 <label class="sr-only" for="topbar-q">Cari surat</label>
                 <?= ui_icon('search', 'topbar-search__icon') ?>
-                <input id="topbar-q" class="topbar-search__input" type="search" name="q" maxlength="200" placeholder="Cari surat…" autocomplete="off" data-search-shortcut>
+                <input id="topbar-q" class="topbar-search__input" type="search" name="q" maxlength="200" placeholder="Cari ID, agenda, nomor, asal, hal" autocomplete="off" data-search-shortcut>
                 <kbd class="topbar-search__hint" aria-hidden="true">/</kbd>
             </form>
         <?php endif; ?>
     </div>
     <div class="topbar-actions">
+        <details class="account-menu topbar-notifications" data-notification-menu
+                 data-list-url="<?= e(url('notifikasi')) ?>"
+                 data-notification-base="<?= e(url('notifikasi')) ?>"
+                 data-history-url="<?= e(url('riwayat-notifikasi')) ?>"
+                 data-decision-base="<?= e(url('pengajuan')) ?>"
+                 data-letter-base="<?= e(url('surat')) ?>"
+                 data-csrf="<?= e(csrfToken()) ?>"
+                 data-user-id="<?= (int) ($currentUser['id'] ?? 0) ?>"
+                 data-is-admin="<?= $isAdmin ? '1' : '0' ?>">
+            <summary aria-label="Notifikasi" title="Notifikasi">
+                <?= ui_icon('inbox') ?><span class="account-menu__name">Notifikasi</span>
+                <span class="notification-count" data-notification-count hidden>0</span>
+            </summary>
+            <div class="popover notification-popover" aria-label="Notifikasi terbaru">
+                <div class="notification-head"><strong>Notifikasi</strong><span data-notification-unread-label>0 belum dibaca</span></div>
+                <div class="notification-list" data-notification-list role="list"></div>
+                <a class="notification-more" href="<?= e(url('riwayat-notifikasi')) ?>">Lihat selengkapnya</a>
+            </div>
+        </details>
         <details class="account-menu topbar-settings">
             <summary aria-label="Menu akun" title="Menu akun">
                 <?= ui_avatar($username) ?>

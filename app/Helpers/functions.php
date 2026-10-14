@@ -124,7 +124,7 @@ function csrfToken(): string
 
 function validateCsrf(): void
 {
-    $token = (string) ($_POST['csrf_token'] ?? '');
+    $token = is_string($_POST['csrf_token'] ?? null) ? $_POST['csrf_token'] : '';
     $knownToken = (string) ($_SESSION['csrf_token'] ?? '');
 
     if ($knownToken === '' || !hash_equals($knownToken, $token)) {
@@ -146,6 +146,16 @@ function redirect(string $location, array $query = []): never
 {
     header('Location: ' . url($location, $query), true, 303);
     exit;
+}
+
+/** URL aset statis dengan versi otomatis dari waktu ubah file, supaya cache browser tidak menyajikan script/CSS lama. */
+function asset(string $path): string
+{
+    $relative = ltrim($path, '/');
+    $file = APP_ROOT . '/public/assets/' . $relative;
+    $version = is_file($file) ? (string) filemtime($file) : '1';
+
+    return url('assets/' . $relative) . '?v=' . $version;
 }
 
 function url(string $path = '', array $query = []): string

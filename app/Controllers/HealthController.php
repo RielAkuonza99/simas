@@ -18,18 +18,15 @@ final class HealthController
 
             echo json_encode([
                 'status' => 'ok',
-                'environment' => APP_ENVIRONMENT,
                 'database' => 'connected',
-                'base_url' => APP_BASE_URL,
             ], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
             return;
         } catch (\Throwable $error) {
+            error_log('Health check failed: ' . $error->getMessage());
             http_response_code(503);
             echo json_encode([
                 'status' => 'error',
-                'environment' => APP_ENVIRONMENT,
                 'database' => 'unavailable',
-                'message' => $error->getMessage(),
             ], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
         }
     }

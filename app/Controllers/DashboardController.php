@@ -28,6 +28,7 @@ final class DashboardController
             'belum' => $summary['total'] - $summary['disposisi'],
             'terbaru' => $summary['terbaru'],
             'isAdmin' => (currentUser()['role'] ?? '') === 'admin',
+            'canCreate' => in_array(currentUser()['role'] ?? '', ['admin', 'pelayanan'], true),
         ]);
     }
 }

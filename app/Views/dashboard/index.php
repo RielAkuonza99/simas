@@ -11,7 +11,7 @@ $allClear = $total > 0 && $belum === 0;
         <h2 class="page-title">Dashboard</h2>
         <p class="page-sub">Ringkasan surat masuk dan status disposisi.</p>
     </div>
-    <?php if ($isAdmin): ?>
+    <?php if ($canCreate): ?>
         <div class="page-actions">
             <a class="btn btn-primary" href="<?= e(url('surat/tambah')) ?>"><?= ui_icon('plus') ?>Tambah Surat</a>
         </div>
@@ -59,21 +59,21 @@ $allClear = $total > 0 && $belum === 0;
         <?= ui_empty_state(
             'inbox',
             'Belum ada surat masuk',
-            $isAdmin ? 'Administrator dapat menambahkan surat pertama.' : 'Hubungi administrator untuk menambahkan surat.',
-            $isAdmin ? '<a class="btn btn-primary" href="' . e(url('surat/tambah')) . '">' . ui_icon('plus') . 'Tambah Surat</a>' : ''
+            $canCreate ? 'Tambahkan surat masuk pertama.' : 'Hubungi administrator untuk menambahkan surat.',
+            $canCreate ? '<a class="btn btn-primary" href="' . e(url('surat/tambah')) . '">' . ui_icon('plus') . 'Tambah Surat</a>' : ''
         ) ?>
     <?php else: ?>
         <div class="table-wrap">
             <table class="data-table data-table--cards">
                 <thead>
-                    <tr><th>Surat</th><th>Hal</th><th>Surat Dari</th><th>Tanggal</th><th>Disposisi</th><th>Google Drive</th></tr>
+                    <tr><th>ID Surat / No Agenda</th><th>Hal Surat</th><th>Asal Surat</th><th>Diterima</th><th>Disposisi akhir</th><th>Bukti Dukung</th></tr>
                 </thead>
                 <tbody>
                 <?php foreach ($terbaru as $surat): ?>
                     <tr>
                         <td class="c-id">
-                            <span class="code"><?= e($surat['kode_pencarian'] ?: '-') ?></span>
-                            <span class="cell-sub">Agenda <?= (int) $surat['no'] ?></span>
+                            <span class="code">#<?= (int) $surat['id'] ?></span>
+                            <span class="cell-sub">B-<?= str_pad((string) $surat['no'], 4, '0', STR_PAD_LEFT) ?></span>
                         </td>
                         <td class="c-hal">
                             <a class="hal-link" href="<?= e(url('surat/' . (int) $surat['id'])) ?>"><?= e($surat['ringkas'] ?: '-') ?></a>
@@ -81,12 +81,17 @@ $allClear = $total > 0 && $belum === 0;
                         </td>
                         <td class="c-from"><?= e($surat['surat_dari'] ?: '-') ?></td>
                         <td class="c-date nowrap"><?= e(formatTanggal($surat['tanggal_masuk'])) ?></td>
-                        <td class="c-disp"><?= ui_disposisi_meter((int) $surat['jumlah_disposisi']) ?></td>
+                        <td class="c-disp">
+                            <?php if ((int) $surat['selesai_tahap'] > 0): ?>
+                                <?= ui_badge('Selesai disposisi ' . (int) $surat['selesai_tahap'], 'ok', true) ?>
+                                <?php if (!empty($surat['pejabat_akhir'])): ?><span class="cell-sub"><?= e($surat['pejabat_akhir']) ?></span><?php endif; ?>
+                            <?php else: ?><?= ui_badge('Belum selesai', 'neutral', true) ?><?php endif; ?>
+                        </td>
                         <td class="c-doc">
                             <?php if ($surat['driveUrl']): ?>
-                                <a class="btn btn-secondary btn-sm" href="<?= e($surat['driveUrl']) ?>" target="_blank" rel="noopener noreferrer"><?= ui_icon('external') ?>Buka Drive</a>
+                                <a class="btn btn-secondary btn-sm" href="<?= e($surat['driveUrl']) ?>" target="_blank" rel="noopener noreferrer"><?= ui_icon('external') ?>Bukti Dukung</a>
                             <?php else: ?>
-                                <span class="muted text-sm">Belum ada tautan</span>
+                                <span class="muted text-sm">Belum ada</span>
                             <?php endif; ?>
                         </td>
                     </tr>
