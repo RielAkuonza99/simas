@@ -1,10 +1,28 @@
 name: Deploy ke InfinityFree
+
+# Demo       : otomatis setiap push ke branch main.
+# Production : otomatis setiap push ke branch production.
+# Keduanya juga bisa dijalankan manual lewat tab Actions > Run workflow.
 on:
   push:
-    branches: [main]
+    branches: [main, production]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Target deploy
+        type: choice
+        options: [demo, production]
+        default: demo
+
 jobs:
-  deploy:
+  deploy-demo:
+    name: Deploy Demo
+    if: (github.event_name == 'push' && github.ref_name == 'main') || (github.event_name == 'workflow_dispatch' && inputs.target == 'demo')
     runs-on: ubuntu-latest
+    environment: demo
+    concurrency:
+      group: deploy-demo
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -44,3 +62,52 @@ jobs:
             storage/private/**
             *.sql
             *.md
+
+  deploy-production:
+    name: Deploy Production
+    if: (github.event_name == 'push' && github.ref_name == 'production') || (github.event_name == 'workflow_dispatch' && inputs.target == 'production')
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: dom, gd, mbstring
+      - name: Install PHP dependencies
+        run: composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+      - uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_PROD_SERVER }}
+          username: ${{ secrets.FTP_PROD_USERNAME }}
+          password: ${{ secrets.FTP_PROD_PASSWORD }}
+          server-dir: /htdocs/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            .env
+            **/.env*
+            **/*.pem
+            **/*.key
+            **/*.p12
+            **/*.pfx
+            **/*.ppk
+            **/*.jks
+            **/*secret*
+            **/*credential*
+            **/*private-key*
+            .gemini/**
+            .claude/**
+            .agents/**
+            .opencode/**
+            anti-slop/**
+            database/**
+            github/**
+            storage/logs/**
+            storage/private/**
+            *.sql
+            *.md
+            bin/seed-demo-letters.php

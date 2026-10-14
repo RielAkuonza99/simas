@@ -8,6 +8,7 @@ use App\Middleware\AuthMiddleware;
 use App\Models\SuratModel;
 use App\Models\AdminInboxModel;
 use App\Security\AuditLogger;
+use App\Services\SuratExportFormatter;
 use App\Services\SuratService;
 
 final class SuratController
@@ -98,15 +99,7 @@ final class SuratController
         requirePost();
         validateCsrf();
         [$rows, , $filename] = $this->exportSelection();
-        $delimiter = ';';
-        $headers = [
-            'ID Surat', 'Kode Pencarian', 'No Agenda', 'Tanggal Masuk', 'Asal Surat', 'Pengusul',
-            'Nomor Surat', 'Tanggal Surat', 'Sifat Surat', 'Hal Surat', 'Catatan Surat', 'Bukti Surat',
-            'Status Disposisi', 'Keterangan Status', 'Tahap Akhir', 'Pejabat Akhir', 'Tanggal Akhir',
-            'Diselesaikan Pada', 'Dicatat Oleh', 'Bukti Disposisi Akhir', 'Dibuat Oleh', 'Dibuat Pada',
-            'Diubah Pada', 'Tahap Disposisi', 'Asal Disposisi', 'Tujuan Disposisi',
-            'Tanggal Disposisi', 'Catatan Disposisi', 'Lampiran Disposisi',
-        ];
+        $delimiter = SuratExportFormatter::CSV_DELIMITER;
 
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $filename . '.csv"');
@@ -117,61 +110,13 @@ final class SuratController
             http_response_code(500);
             exit;
         }
-        fwrite($output, "\xEF\xBB\xBFsep={$delimiter}\r\n");
-        fputcsv($output, $headers, $delimiter, '"', '\\');
+
+        // BOM agar Excel membaca UTF-8. Baris pertama langsung header kolom,
+        // dan satu baris = satu surat sehingga mudah difilter atau diimpor.
+        fwrite($output, "\xEF\xBB\xBF");
+        fputcsv($output, SuratExportFormatter::csvHeaders(), $delimiter, '"', '\\', "\r\n");
         foreach ($rows as $row) {
-            $stage = (int) $row['selesai_tahap'];
-            $status = $stage > 0 ? 'Selesai disposisi ' . $stage : 'Belum selesai';
-            $description = match (true) {
-                $stage > 0 => 'Surat selesai pada tahap ' . $stage
-                    . ($row['pejabat_akhir'] ? ' oleh ' . $row['pejabat_akhir'] : '')
-                    . ($row['tanggal_akhir'] ? ' tanggal ' . $row['tanggal_akhir'] : '') . '.',
-                $row['disposisi'] !== [] => count($row['disposisi']) . ' tahap disposisi tercatat; belum ditandai selesai.',
-                default => 'Belum ada disposisi yang dicatat.',
-            };
-            $values = [
-                '#' . (int) $row['id'],
-                $row['kode_pencarian'],
-                'B-' . str_pad((string) $row['no'], 4, '0', STR_PAD_LEFT),
-                $row['tanggal_masuk'],
-                $row['surat_dari'],
-                $row['pengusul'],
-                $row['nomor_surat'],
-                $row['tanggal_surat'],
-                $row['sifat'],
-                $row['hal'],
-                $row['catatan'],
-                $row['link_drive'],
-                $status,
-                $description,
-                $stage > 0 ? $stage : '',
-                $row['pejabat_akhir'],
-                $row['tanggal_akhir'],
-                $row['selesai_pada'],
-                $row['dicatat_oleh'],
-                $row['link_selesai'],
-                $row['dibuat_oleh'],
-                $row['created_at'],
-                $row['updated_at'],
-            ];
-            $dispositions = $row['disposisi'] !== [] ? $row['disposisi'] : [0 => []];
-            foreach ($dispositions as $number => $disposition) {
-                $stageValues = array_merge($values, [
-                    (int) ($disposition['tahap'] ?? $number) ?: '',
-                    $disposition['asal'] ?? '',
-                    $disposition['tujuan'] ?? '',
-                    $disposition['tanggal'] ?? '',
-                    $disposition['catatan'] ?? '',
-                    $disposition['link_lampiran'] ?? '',
-                ]);
-                fputcsv(
-                    $output,
-                    array_map(fn (mixed $value): string => $this->safeCsvCell($value), $stageValues),
-                    $delimiter,
-                    '"',
-                    '\\'
-                );
-            }
+            fputcsv($output, SuratExportFormatter::csvRow($row), $delimiter, '"', '\\', "\r\n");
         }
         fclose($output);
         exit;
@@ -200,6 +145,12 @@ final class SuratController
         $pdf->loadHtml($html, 'UTF-8');
         $pdf->setPaper('A4', 'landscape');
         $pdf->render();
+
+        $canvas = $pdf->getCanvas();
+        $font = $pdf->getFontMetrics()->getFont('DejaVu Sans');
+        $footerY = $canvas->get_height() - 24;
+        $canvas->page_text(22, $footerY, 'Laporan Surat Masuk BAPPERIDA · ' . mb_strimwidth($rangeLabel, 0, 90, '…', 'UTF-8'), $font, 7, [0.4, 0.45, 0.5]);
+        $canvas->page_text($canvas->get_width() - 100, $footerY, 'Halaman {PAGE_NUM} dari {PAGE_COUNT}', $font, 7, [0.4, 0.45, 0.5]);
 
         header('Content-Type: application/pdf');
         header('Content-Disposition: attachment; filename="' . $filename . '.pdf"');
@@ -471,13 +422,6 @@ final class SuratController
         return is_string($value) ? $value : '';
     }
     
-    private function safeCsvCell(mixed $value): string
-    {
-        $text = is_scalar($value) ? (string) $value : '';
-        
-        return preg_match('/^[\x00-\x20]*[=+@\-]/u', $text) ? "'" . $text : $text;
-    }
-
     private function filterDate(string $value): string
     {
         $date = trim($value);
