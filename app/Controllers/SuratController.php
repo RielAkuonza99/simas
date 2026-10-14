@@ -8,6 +8,7 @@ use App\Middleware\AuthMiddleware;
 use App\Models\SuratModel;
 use App\Models\AdminInboxModel;
 use App\Security\AuditLogger;
+use App\Services\SimpleXlsxWriter;
 use App\Services\SuratExportFormatter;
 use App\Services\SuratService;
 
@@ -119,6 +120,31 @@ final class SuratController
             fputcsv($output, SuratExportFormatter::csvRow($row), $delimiter, '"', '\\', "\r\n");
         }
         fclose($output);
+        exit;
+    }
+
+    public function exportXlsx(): void
+    {
+        AuthMiddleware::requireAdmin();
+        requirePost();
+        validateCsrf();
+        [$rows, , $filename] = $this->exportSelection();
+        if (!class_exists(\ZipArchive::class)) {
+            http_response_code(500);
+            exit('Ekstensi ZIP PHP belum aktif di server ini. Gunakan ekspor CSV atau PDF.');
+        }
+
+        $path = (new SimpleXlsxWriter('Surat Masuk'))->save(
+            SuratExportFormatter::columns(),
+            array_map(SuratExportFormatter::xlsxRow(...), $rows)
+        );
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $filename . '.xlsx"');
+        header('Content-Length: ' . (string) filesize($path));
+        header('Cache-Control: no-store, private');
+        header('X-Content-Type-Options: nosniff');
+        readfile($path);
+        @unlink($path);
         exit;
     }
 

@@ -235,6 +235,7 @@ $chip = static function (string $label, string $removeKey) use ($filters): strin
             </div>
             <footer class="export-dialog__actions">
                 <button class="btn btn-secondary" type="button" data-export-close>Batal</button>
+                <button class="btn btn-secondary" type="submit" formaction="<?= e(url('surat/ekspor/xlsx')) ?>" name="format" value="xlsx"><?= ui_icon('file-text') ?>Simpan Excel</button>
                 <button class="btn btn-secondary" type="submit" formaction="<?= e(url('surat/ekspor')) ?>" name="format" value="csv"><?= ui_icon('file-text') ?>Simpan CSV</button>
                 <button class="btn btn-primary" type="submit" formaction="<?= e(url('surat/ekspor/pdf')) ?>" name="format" value="pdf"><?= ui_icon('file-text') ?>Simpan PDF</button>
             </footer>
