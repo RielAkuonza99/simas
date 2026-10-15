@@ -20,6 +20,21 @@ final class Router
         $this->add('POST', $path, $handler);
     }
 
+    public function patch(string $path, callable $handler): void
+    {
+        $this->add('PATCH', $path, $handler);
+    }
+
+    public function delete(string $path, callable $handler): void
+    {
+        $this->add('DELETE', $path, $handler);
+    }
+
+    public function options(string $path, callable $handler): void
+    {
+        $this->add('OPTIONS', $path, $handler);
+    }
+
     public function dispatch(): void
     {
         $requestPath = parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);

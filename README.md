@@ -177,6 +177,42 @@ File `.env` ada di root, diabaikan git, dan **tidak di-deploy**. Buat manual di 
 | `SUPABASE_URL` | URL project Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | Kunci service role (rahasia, jangan dibagikan) |
 | `SUPABASE_ARCHIVE_TABLE` | Default `archive_surat_metadata` |
+| `BREVO_API_KEY` | API key Brevo untuk mengirim feedback (rahasia, hanya di `.env`) |
+| `BREVO_SENDER_EMAIL` | Pengirim terverifikasi di Brevo; default `primabapperida@gmail.com` |
+| `DEVELOPER_FEEDBACK_EMAIL` | Tujuan email feedback; default `rielakuonza3@gmail.com` |
+| `DEVELOPER_API_TOKEN` | Token Bearer acak untuk API developer (rahasia, minimal 40 karakter) |
+| `DEVELOPER_API_ORIGINS` | Origin dashboard yang diizinkan browser, pisahkan dengan koma; tanpa path dan tanpa wildcard |
+
+Alamat pengirim harus diverifikasi pada akun Brevo. Buat token API secara lokal, lalu simpan hanya di `.env` hosting dan server dashboard:
+
+```bash
+php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
+```
+
+## API Developer
+
+API memakai header `Authorization: Bearer <DEVELOPER_API_TOKEN>`. Endpoint v1 saat ini hanya menyediakan pengelolaan feedback:
+
+| Method | Endpoint | Fungsi |
+|---|---|---|
+| `GET` | `/api/v1` | Daftar endpoint yang tersedia |
+| `GET` | `/api/v1/feedback` | Daftar feedback; mendukung `limit`, `offset`, dan `status` |
+| `GET` | `/api/v1/feedback/{id}` | Detail feedback |
+| `GET` | `/api/v1/feedback/{id}/photo` | Lampiran privat |
+| `PATCH` | `/api/v1/feedback/{id}` | Ubah `review_status` menjadi `NEW`, `REVIEWED`, atau `DONE` |
+| `DELETE` | `/api/v1/feedback/{id}` | Hapus feedback beserta lampirannya |
+
+Contoh ubah status:
+
+```http
+PATCH /api/v1/feedback/12
+Authorization: Bearer <DEVELOPER_API_TOKEN>
+Content-Type: application/json
+
+{"review_status":"DONE"}
+```
+
+API belum mengekspos pengelolaan surat, pengguna, atau konfigurasi. Setiap resource harus mendapat endpoint dan validasi hak akses tersendiri; API tidak menyediakan akses SQL umum. Jangan menaruh token developer di JavaScript dashboard yang dikirim ke browser. Panggil API dari backend dashboard agar token tetap rahasia. CORS hanya pembatas origin browser, bukan pengganti autentikasi.
 
 ## Setup lokal
 
@@ -205,7 +241,7 @@ Push ke `main` → `.github/workflows/deploy.yml` → FTP ke `/htdocs/` di Infin
 
 Secrets GitHub: `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD`.
 
-Tidak ikut di-deploy: `.git*`, `.env`, `.gemini`, `.claude`, `.agents`, `.opencode`, `anti-slop`, `database`, `storage/logs`, `storage/private`, semua `*.md`. Jalankan migrasi hosting dan Supabase secara manual sebelum versi aplikasi baru digunakan.
+Tidak ikut di-deploy: `.git*`, `.env`, `.gemini`, `.claude`, `.agents`, `.opencode`, `anti-slop`, `database`, `storage/logs`, `storage/private`, semua `*.md`. Untuk database lama, backup lalu impor `database/feedback.sql` satu kali. Atur variabel Brevo dan API developer melalui File Manager sebelum memakai fitur terkait. Jalankan migrasi Supabase secara manual sebelum versi aplikasi baru digunakan.
 
 Catatan: file yang dihapus dari repo tidak otomatis terhapus di server. `storage/logs` dan `storage/private` dibuat otomatis oleh aplikasi saat dibutuhkan.
 
