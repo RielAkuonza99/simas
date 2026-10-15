@@ -139,11 +139,13 @@ Tabel yang dipakai kode:
 
 Struktur surat: **Agenda Surat** (`id`, nomor agenda, tanggal diterima), **Informasi Surat** (asal, nomor/tanggal, sifat, hal, bukti dukung), dan **Disposisi** (3 tahap awal, maksimal 5; pejabat, tujuan yang tersedia, tanggal, catatan). Tahap akhir disimpan pada `selesai_tahap`, beserta akun/tanggal pencatatan dan `link_selesai` opsional. Kolom lama `pengusul`, `catatan` isi surat, dan lampiran tahap dipertahankan pada database hosting agar migrasi tidak menghapus data historis, tetapi tidak dipakai form baru.
 
-Untuk database lokal bersih, import `database/local-clean.sql`. File ini membuat database `bapperida_local`, mempertahankan akun admin `RielAkuonza`, dan mengosongkan data operasional.
+`database/local-clean.sql` membuat skema lengkap untuk lokal atau hosting demo, akun admin awal `RielAkuonza`, dan 100 surat sintetis. Pilih database kosong sebelum mengimpor; file ini tidak membuat database dan tidak menghapus data yang sudah ada. Impor ulang tidak menggandakan tabel, akun, atau data demo.
 
-`db-demo.sql` menyiapkan 100 surat contoh (50 selesai dan 50 belum). Pada database lokal yang sudah berjalan, gunakan `php bin/seed-demo-letters.php`; perintah ini hanya berjalan saat `APP_ENV=local` dan menolak seed duplikat.
+Pada database lokal yang sudah berjalan, gunakan `php bin/seed-demo-letters.php` untuk membuat 100 surat contoh (50 selesai dan 50 belum); perintah ini hanya berjalan saat `APP_ENV=local` dan menolak seed duplikat.
 
-Untuk database hosting yang sudah berisi data, backup database lalu pilih database aplikasi dan jalankan `database/db-host.sql` satu kali. Script bersifat aditif dan tidak menghapus kolom historis. Folder `database/` tidak ikut deploy otomatis, jadi upload/import manual melalui panel hosting. Jalankan `database/supabase-archive.sql` satu kali di SQL Editor Supabase untuk menambah kolom ID surat dan status disposisi akhir.
+`database/db-host.sql` adalah skema lengkap production tanpa data surat demo. Pilih database hosting yang kosong di phpMyAdmin sebelum mengimpor; file ini menyertakan akun admin awal, tidak membuat database, dan tidak menghapus data. Impor ulang tidak mengubah tabel yang sudah ada, jadi file ini bukan migrasi untuk skema lama.
+
+Untuk database hosting yang sudah berisi data, backup dahulu lalu jalankan `database/upgrade-host-existing.sql` satu kali. Jangan jalankan skrip upgrade berulang kali karena kolom dan constraint yang sama tidak dapat ditambahkan dua kali. Folder `database/` tidak ikut deploy otomatis, jadi upload/import manual melalui panel hosting. Jalankan `database/supabase-archive.sql` satu kali di SQL Editor Supabase untuk menambah kolom ID surat dan status disposisi akhir.
 
 ## Sinkronisasi arsip (Supabase)
 
@@ -178,10 +180,11 @@ File `.env` ada di root, diabaikan git, dan **tidak di-deploy**. Buat manual di 
 
 ## Setup lokal
 
-Impor database dari folder proyek dengan MySQL/MariaDB:
+Buat database lokal kosong lalu impor skema beserta data demo dengan MySQL/MariaDB:
 
 ```bash
-mysql -u root -p < database/local-clean.sql
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS bapperida_local CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+mysql -u root -p bapperida_local < database/local-clean.sql
 ```
 
 Atur `.env` agar `DB_NAME=bapperida_local`, lalu jalankan aplikasi:
@@ -225,4 +228,4 @@ Catatan: file yang dihapus dari repo tidak otomatis terhapus di server. `storage
 - Perbaikan spam popup notifikasi saat refresh dan bug notifikasi baru yang tertelan setelah ID database direset (lihat bagian keamanan).
 - Status login pengguna kini menampilkan semua akun yang sedang aktif, bukan hanya akun sendiri.
 - Tampilan kartu/tabel memanjang ke samping (geser horizontal) di semua ukuran layar.
-- Cache-busting aset otomatis. Skema database tidak berubah, jadi `db-demo.sql` dan `database/db-host.sql` tetap sama.
+- Cache-busting aset otomatis. Skema production lengkap tersedia di `database/db-host.sql`; `database/local-clean.sql` menambahkan data demo.

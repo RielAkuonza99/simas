@@ -33,7 +33,7 @@ jobs:
             .opencode/**
             anti-slop/**
             database/**
-            github/**
+            .github/**
             storage/logs/**
             storage/private/**
             *.sql

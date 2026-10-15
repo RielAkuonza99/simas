@@ -107,9 +107,9 @@ final class AuthService
         setcookie('bapperida_device', $token, [
             'expires' => $expiresAt,
             'path' => '/',
-            'secure' => self::requestIsHttps() || APP_ENVIRONMENT !== 'local',
+            'secure' => self::requestIsHttps(),
             'httponly' => true,
-            'samesite' => 'Strict',
+            'samesite' => 'Lax',
         ]);
     }
 
@@ -118,9 +118,9 @@ final class AuthService
         setcookie('bapperida_device', '', [
             'expires' => time() - 3600,
             'path' => '/',
-            'secure' => self::requestIsHttps() || APP_ENVIRONMENT !== 'local',
+            'secure' => self::requestIsHttps(),
             'httponly' => true,
-            'samesite' => 'Strict',
+            'samesite' => 'Lax',
         ]);
     }
 

@@ -23,7 +23,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
         'lifetime' => 0,
         'path' => '/',
-        'secure' => APP_ENVIRONMENT !== 'local' || $isHttps,
+        'secure' => $isHttps,
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
