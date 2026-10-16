@@ -201,26 +201,50 @@ $chip = static function (string $label, string $removeKey) use ($filters): strin
     </nav>
 <?php endif; ?>
 <?php if ($isAdminUser): ?>
+    <?php
+    $exportMonths = [1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus', 9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'];
+    $exportYear = (int) date('Y');
+    $exportMonth = (int) date('n');
+    ?>
     <dialog class="dialog export-dialog" data-export-dialog data-search-url="<?= e(url('surat/ekspor/cari')) ?>" aria-labelledby="export-dialog-title">
         <header class="export-dialog__head">
-            <div><h2 class="dialog__title" id="export-dialog-title">Ekspor surat</h2><p class="field-hint">Pilih rentang waktu atau cari surat berdasarkan ID.</p></div>
+            <div><h2 class="dialog__title" id="export-dialog-title">Ekspor surat masuk</h2><p class="field-hint">Pilih rentang waktu, lalu unduh sebagai Excel atau PDF. Isi tabel keduanya sama.</p></div>
             <button class="icon-btn" type="button" data-export-close aria-label="Tutup ekspor" title="Tutup"><?= ui_icon('x') ?></button>
         </header>
-        <form method="post" action="<?= e(url('surat/ekspor')) ?>" data-export-form>
+        <form method="post" action="<?= e(url('surat/ekspor/xlsx')) ?>" data-export-form>
             <input type="hidden" name="csrf_token" value="<?= e(csrfToken()) ?>">
             <div class="export-dialog__body">
                 <fieldset class="export-period">
                     <legend class="label">Rentang waktu surat diterima</legend>
                     <div class="export-period__choices">
-                        <label><input type="radio" name="range" value="week" checked><span>Minggu ini</span></label>
-                        <label><input type="radio" name="range" value="month"><span>Bulan ini</span></label>
-                        <label><input type="radio" name="range" value="year"><span>Tahun ini</span></label>
+                        <label><input type="radio" name="range" value="week" checked><span>Per minggu</span></label>
+                        <label><input type="radio" name="range" value="month"><span>Per bulan</span></label>
                         <label><input type="radio" name="range" value="all"><span>Seluruhnya</span></label>
                     </div>
                 </fieldset>
-                <p class="export-dialog__hint">Surat yang dipilih berdasarkan ID akan diekspor tanpa mengikuti rentang waktu.</p>
+                <div class="field" data-export-week>
+                    <label class="label" for="export-week-date">Pilih minggu</label>
+                    <input class="input" type="date" id="export-week-date" name="week_date" value="<?= e(date('Y-m-d')) ?>" data-export-week-input>
+                    <div class="field-hint" data-export-week-hint>Pilih tanggal mana pun di minggu yang diinginkan (Senin sampai Minggu).</div>
+                </div>
+                <div class="field" data-export-month hidden>
+                    <span class="label" id="export-month-label">Pilih bulan</span>
+                    <div class="export-month-pick" role="group" aria-labelledby="export-month-label">
+                        <select class="select" name="month_m" aria-label="Bulan">
+                            <?php foreach ($exportMonths as $number => $label): ?>
+                                <option value="<?= $number ?>" <?= $number === $exportMonth ? 'selected' : '' ?>><?= e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <select class="select" name="month_y" aria-label="Tahun">
+                            <?php for ($year = $exportYear; $year >= $exportYear - 5; $year--): ?>
+                                <option value="<?= $year ?>" <?= $year === $exportYear ? 'selected' : '' ?>><?= $year ?></option>
+                            <?php endfor; ?>
+                        </select>
+                    </div>
+                </div>
+                <p class="export-dialog__hint">Surat yang dipilih berdasarkan ID di bawah akan diekspor tanpa mengikuti rentang waktu.</p>
                 <div class="field">
-                    <label class="label" for="export-letter-id">Cari ID surat</label>
+                    <label class="label" for="export-letter-id">Cari ID surat (opsional)</label>
                     <div class="export-id-search">
                         <input class="input" type="number" id="export-letter-id" min="1" step="1" inputmode="numeric" placeholder="Contoh: 125" data-export-id>
                         <button class="btn btn-secondary" type="button" data-export-search><?= ui_icon('search') ?>Cari surat</button>
@@ -235,9 +259,8 @@ $chip = static function (string $label, string $removeKey) use ($filters): strin
             </div>
             <footer class="export-dialog__actions">
                 <button class="btn btn-secondary" type="button" data-export-close>Batal</button>
-                <button class="btn btn-secondary" type="submit" formaction="<?= e(url('surat/ekspor/xlsx')) ?>" name="format" value="xlsx"><?= ui_icon('file-text') ?>Simpan Excel</button>
-                <button class="btn btn-secondary" type="submit" formaction="<?= e(url('surat/ekspor')) ?>" name="format" value="csv"><?= ui_icon('file-text') ?>Simpan CSV</button>
-                <button class="btn btn-primary" type="submit" formaction="<?= e(url('surat/ekspor/pdf')) ?>" name="format" value="pdf"><?= ui_icon('file-text') ?>Simpan PDF</button>
+                <button class="btn btn-secondary" type="submit" formaction="<?= e(url('surat/ekspor/xlsx')) ?>" name="format" value="xlsx"><?= ui_icon('file-text') ?>Unduh Excel</button>
+                <button class="btn btn-primary" type="submit" formaction="<?= e(url('surat/ekspor/pdf')) ?>" name="format" value="pdf"><?= ui_icon('file-text') ?>Unduh PDF</button>
             </footer>
         </form>
     </dialog>

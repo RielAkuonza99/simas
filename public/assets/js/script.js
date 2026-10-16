@@ -475,10 +475,39 @@
             }
         };
 
+        const weekField = dialog.querySelector('[data-export-week]');
+        const monthField = dialog.querySelector('[data-export-month]');
+        const weekInput = dialog.querySelector('[data-export-week-input]');
+        const weekHint = dialog.querySelector('[data-export-week-hint]');
+        const formatDay = (date) => date.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const updateWeekHint = () => {
+            if (!weekInput || !weekHint) return;
+            const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(weekInput.value);
+            if (!match) {
+                weekHint.textContent = 'Pilih tanggal mana pun di minggu yang diinginkan.';
+                return;
+            }
+            const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+            const monday = new Date(date);
+            monday.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+            const sunday = new Date(monday);
+            sunday.setDate(monday.getDate() + 6);
+            weekHint.textContent = `Minggu yang diekspor: Senin ${formatDay(monday)} sampai Minggu ${formatDay(sunday)}.`;
+        };
+        const updateRangeFields = () => {
+            const range = form.querySelector('input[name="range"]:checked')?.value;
+            if (weekField) weekField.hidden = range !== 'week';
+            if (monthField) monthField.hidden = range !== 'month';
+        };
+        form.querySelectorAll('input[name="range"]').forEach((radio) => radio.addEventListener('change', updateRangeFields));
+        weekInput?.addEventListener('input', updateWeekHint);
+        updateRangeFields();
+        updateWeekHint();
+
         openButton.addEventListener('click', () => {
             if (typeof dialog.showModal === 'function') dialog.showModal();
             else dialog.setAttribute('open', '');
-            idField.focus();
+            (form.querySelector('input[name="range"]:checked') ?? idField).focus();
         });
         closeButtons.forEach((button) => button.addEventListener('click', () => dialog.close()));
         dialog.addEventListener('click', (event) => {
@@ -830,6 +859,8 @@
         const template = document.querySelector('[data-disposition-template]');
         if (!list || !addButton || !template) return;
 
+        const MAX_TARGETS = 5;
+        const targetTemplate = document.querySelector('[data-target-template]');
         const countLabel = list.parentElement.querySelector('[data-disposition-count]');
         const completionOptions = [...list.parentElement.querySelectorAll('.completion-option input[type="radio"]')];
         const completionProof = list.parentElement.querySelector('[data-completion-proof]');
@@ -860,11 +891,18 @@
                     field.name = `disposisi[${stage}][${name}]`;
                     step.querySelector(`[data-disposition-label="${name}"]`).htmlFor = id;
                 });
-                step.querySelectorAll('[data-disposition-target]').forEach((field) => {
-                    const name = field.dataset.dispositionTarget;
-                    field.id = `d${stage}_${name}_${[...step.querySelectorAll('[data-disposition-target]')].indexOf(field) + 1}`;
-                    field.name = `disposisi[${stage}][${name}][]`;
+                const targetRows = [...step.querySelectorAll('[data-target-row]')];
+                targetRows.forEach((row, rowIndex) => {
+                    const field = row.querySelector('[data-disposition-target]');
+                    field.id = `d${stage}_tujuan_${rowIndex + 1}`;
+                    field.name = `disposisi[${stage}][tujuan][]`;
+                    field.setAttribute('aria-label', `Tujuan ${rowIndex + 1} disposisi ${stage}`);
+                    row.querySelector('[data-remove-target]')?.setAttribute('aria-label', `Hapus tujuan ${rowIndex + 1} disposisi ${stage}`);
                 });
+                const addTarget = step.querySelector('[data-add-target]');
+                if (addTarget) addTarget.disabled = targetRows.length >= MAX_TARGETS;
+                const targetCount = step.querySelector('[data-target-count]');
+                if (targetCount) targetCount.textContent = `${targetRows.length} dari ${MAX_TARGETS} tujuan`;
             });
             addButton.disabled = steps.length >= 5;
             completionOptions.forEach((option) => {
@@ -879,6 +917,69 @@
         };
 
         completionRadios.forEach((radio) => radio.addEventListener('change', updateCompletionProof));
+
+        /* Tujuan manual: tambah/hapus baris, maksimal 5 per tahap. */
+        const addTargetRow = (group, value = '') => {
+            const targetList = group.querySelector('[data-target-list]');
+            if (!targetList || targetList.querySelectorAll('[data-target-row]').length >= MAX_TARGETS) return null;
+            const source = targetTemplate?.content.firstElementChild ?? targetList.querySelector('[data-target-row]');
+            if (!source) return null;
+            const row = source.cloneNode(true);
+            const input = row.querySelector('[data-disposition-target]');
+            input.value = value;
+            targetList.append(row);
+            return input;
+        };
+
+        list.addEventListener('click', (event) => {
+            const addTarget = event.target.closest('[data-add-target]');
+            if (addTarget) {
+                const input = addTargetRow(addTarget.closest('[data-target-group]'));
+                update();
+                input?.focus();
+                return;
+            }
+            const removeTarget = event.target.closest('[data-remove-target]');
+            if (!removeTarget) return;
+            const row = removeTarget.closest('[data-target-row]');
+            const group = removeTarget.closest('[data-target-group]');
+            const rows = group.querySelectorAll('[data-target-row]');
+            if (rows.length <= 1) {
+                const only = row.querySelector('[data-disposition-target]');
+                only.value = '';
+                only.focus();
+                return;
+            }
+            const previous = row.previousElementSibling ?? row.nextElementSibling;
+            row.remove();
+            update();
+            previous?.querySelector('[data-disposition-target]')?.focus();
+        });
+
+        list.addEventListener('keydown', (event) => {
+            const field = event.target.closest?.('[data-disposition-target]');
+            if (!field || event.key !== 'Enter') return;
+            event.preventDefault();
+            if (field.value.trim() === '') return;
+            const input = addTargetRow(field.closest('[data-target-group]'));
+            update();
+            input?.focus();
+        });
+
+        // Koma atau titik koma memisahkan beberapa tujuan: pecah menjadi baris terpisah.
+        list.addEventListener('change', (event) => {
+            const field = event.target.closest?.('[data-disposition-target]');
+            if (!field || !/[,;]/.test(field.value)) return;
+            const parts = field.value.split(/[,;]/).map((part) => part.trim().replace(/\s+/g, ' ')).filter(Boolean);
+            const group = field.closest('[data-target-group]');
+            field.value = parts.shift() ?? '';
+            let dropped = 0;
+            parts.forEach((part) => {
+                if (!addTargetRow(group, part)) dropped += 1;
+            });
+            update();
+            if (dropped > 0) toast(`Maksimal ${MAX_TARGETS} tujuan per disposisi. ${dropped} tujuan berlebih tidak ditambahkan.`);
+        });
 
         list.addEventListener('click', (event) => {
             const removeButton = event.target.closest('[data-remove-disposition]');
@@ -919,6 +1020,88 @@
             step.querySelector('[data-disposition-field]').focus();
         });
         update();
+    };
+
+    /* ---------- Feedback photos: up to 5, previews, client-side downscale ---------- */
+    const initFeedbackPhotos = () => {
+        const box = document.querySelector('[data-feedback-photos]');
+        const input = box?.querySelector('input[type="file"]');
+        const listEl = box?.querySelector('[data-photo-list]');
+        if (!box || !input || !listEl || typeof DataTransfer === 'undefined') return;
+        const maxFiles = Number(box.dataset.maxFiles) || 5;
+        const maxBytes = Number(box.dataset.maxBytes) || 5242880;
+        const maxTotal = Number(box.dataset.maxTotal) || 12582912;
+        const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+        let files = [];
+        const size = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+        const shrink = (file) => new Promise((resolve) => {
+            if (file.size <= 1048576) { resolve(file); return; }
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = () => {
+                URL.revokeObjectURL(url);
+                const scale = Math.min(1, 1920 / Math.max(img.width, img.height));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.width * scale);
+                canvas.height = Math.round(img.height * scale);
+                const ctx = canvas.getContext('2d');
+                if (!ctx) { resolve(file); return; }
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob((blob) => {
+                    if (!blob || blob.size >= file.size) { resolve(file); return; }
+                    resolve(new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg', lastModified: Date.now() }));
+                }, 'image/jpeg', 0.82);
+            };
+            img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+            img.src = url;
+        });
+
+        const sync = () => {
+            const transfer = new DataTransfer();
+            files.forEach((file) => transfer.items.add(file));
+            input.files = transfer.files;
+            listEl.replaceChildren();
+            files.forEach((file, index) => {
+                const li = document.createElement('li');
+                const img = document.createElement('img');
+                img.alt = '';
+                img.src = URL.createObjectURL(file);
+                img.onload = () => URL.revokeObjectURL(img.src);
+                const text = document.createElement('span');
+                text.className = 'photo-name';
+                text.textContent = file.name;
+                const meta = document.createElement('span');
+                meta.className = 'photo-size';
+                meta.textContent = size(file.size);
+                text.append(meta);
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'btn btn-secondary btn-sm';
+                remove.textContent = 'Hapus';
+                remove.setAttribute('aria-label', `Hapus foto ${file.name}`);
+                remove.addEventListener('click', () => { files.splice(index, 1); sync(); });
+                li.append(img, text, remove);
+                listEl.append(li);
+            });
+        };
+
+        input.addEventListener('change', async () => {
+            const picked = [...input.files];
+            const problems = [];
+            for (const original of picked) {
+                if (files.length >= maxFiles) { problems.push(`Maksimal ${maxFiles} foto.`); break; }
+                if (!allowed.includes(original.type)) { problems.push(`${original.name}: format harus JPEG, PNG, atau WebP.`); continue; }
+                const file = await shrink(original);
+                if (file.size > maxBytes) { problems.push(`${original.name}: lebih dari 5 MB.`); continue; }
+                if (files.reduce((sum, item) => sum + item.size, 0) + file.size > maxTotal) { problems.push('Total ukuran foto melebihi 12 MB.'); break; }
+                files.push(file);
+            }
+            sync();
+            if (problems.length) toast([...new Set(problems)].join(' '));
+        });
     };
 
     /* ---------- Manual metadata sync (sync page) ---------- */
@@ -1015,6 +1198,7 @@
         initValidation();
         initPasswordToggle();
         initDispositions();
+        initFeedbackPhotos();
         initManualSync();
     };
 

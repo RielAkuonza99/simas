@@ -14,6 +14,8 @@ use App\Services\SuratService;
 
 final class SuratController
 {
+    private const PDF_MAX_ROWS = 500;
+
     private SuratService $surat;
 
     public function __construct()
@@ -94,49 +96,38 @@ final class SuratController
         redirect('surat');
     }
     
-    public function exportCsv(): void
-    {
-        AuthMiddleware::requireAdmin();
-        requirePost();
-        validateCsrf();
-        [$rows, , $filename] = $this->exportSelection();
-        $delimiter = SuratExportFormatter::CSV_DELIMITER;
-
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '.csv"');
-        header('Cache-Control: no-store, private');
-        header('X-Content-Type-Options: nosniff');
-        $output = fopen('php://output', 'wb');
-        if ($output === false) {
-            http_response_code(500);
-            exit;
-        }
-
-        // BOM agar Excel membaca UTF-8. Baris pertama langsung header kolom,
-        // dan satu baris = satu surat sehingga mudah difilter atau diimpor.
-        fwrite($output, "\xEF\xBB\xBF");
-        fputcsv($output, SuratExportFormatter::csvHeaders(), $delimiter, '"', '\\', "\r\n");
-        foreach ($rows as $row) {
-            fputcsv($output, SuratExportFormatter::csvRow($row), $delimiter, '"', '\\', "\r\n");
-        }
-        fclose($output);
-        exit;
-    }
-
     public function exportXlsx(): void
     {
         AuthMiddleware::requireAdmin();
         requirePost();
         validateCsrf();
-        [$rows, , $filename] = $this->exportSelection();
+        [$rows, $rangeLabel, $filename] = $this->exportSelection();
         if (!class_exists(\ZipArchive::class)) {
             http_response_code(500);
-            exit('Ekstensi ZIP PHP belum aktif di server ini. Gunakan ekspor CSV atau PDF.');
+            exit('Ekstensi ZIP PHP belum aktif di server ini. Gunakan ekspor PDF.');
         }
 
+        $summary = SuratExportFormatter::summary($rows);
+        $numbered = [];
+        foreach ($rows as $index => $row) {
+            $numbered[] = SuratExportFormatter::row($row, $index + 1);
+        }
         $path = (new SimpleXlsxWriter('Surat Masuk'))->save(
             SuratExportFormatter::columns(),
-            array_map(SuratExportFormatter::xlsxRow(...), $rows)
+            $numbered,
+            [
+                'title' => 'Laporan Surat Masuk',
+                'lines' => [
+                    'BAPPERIDA · Periode: ' . $rangeLabel,
+                    'Dibuat pada ' . date('d/m/Y H:i'),
+                    implode('  ·  ', array_map(
+                        static fn (string $label, int $count): string => $label . ': ' . $count,
+                        array_keys($summary),
+                        $summary
+                    )),
+                ],
+                'empty' => 'Tidak ada surat untuk periode atau ID yang dipilih.',
+            ]
         );
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         header('Content-Disposition: attachment; filename="' . $filename . '.xlsx"');
@@ -154,6 +145,10 @@ final class SuratController
         requirePost();
         validateCsrf();
         [$rows, $rangeLabel, $filename] = $this->exportSelection();
+        if (count($rows) > self::PDF_MAX_ROWS) {
+            http_response_code(413);
+            exit('Terlalu banyak surat untuk satu PDF (' . count($rows) . '; maksimal ' . self::PDF_MAX_ROWS . '). Pilih periode yang lebih sempit atau gunakan ekspor Excel.');
+        }
         require_once APP_ROOT . '/vendor/autoload.php';
 
         $options = new \Dompdf\Options();
@@ -165,7 +160,7 @@ final class SuratController
         render('surat/export-pdf', [
             'rows' => $rows,
             'rangeLabel' => $rangeLabel,
-            'generatedAt' => date('Y-m-d H:i:s'),
+            'generatedAt' => date('d/m/Y H:i'),
         ]);
         $html = (string) ob_get_clean();
         $pdf->loadHtml($html, 'UTF-8');
@@ -209,10 +204,11 @@ final class SuratController
         echo json_encode(['item' => $letter], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
     }
 
+    /** @return array{0: list<array>, 1: string, 2: string} baris, label periode, nama berkas tanpa ekstensi */
     private function exportSelection(): array
     {
-        $range = is_string($_POST['range'] ?? null) ? $_POST['range'] : 'all';
-        if (!in_array($range, ['week', 'month', 'year', 'all'], true)) {
+        $range = is_string($_POST['range'] ?? null) ? $_POST['range'] : 'week';
+        if (!in_array($range, ['week', 'month', 'all'], true)) {
             http_response_code(400);
             exit('Rentang ekspor tidak valid.');
         }
@@ -237,22 +233,67 @@ final class SuratController
             exit('Ekspor pilihan dibatasi maksimal 500 surat.');
         }
 
-        $today = new \DateTimeImmutable('today');
-        $fromDate = match ($range) {
-            'week' => $today->modify('monday this week')->format('Y-m-d'),
-            'month' => $today->modify('first day of this month')->format('Y-m-d'),
-            'year' => $today->setDate((int) $today->format('Y'), 1, 1)->format('Y-m-d'),
-            default => null,
-        };
-        $throughDate = $range === 'all' || $ids !== [] ? null : $today->format('Y-m-d');
-        $rangeLabels = ['week' => 'Minggu ini', 'month' => 'Bulan ini', 'year' => 'Tahun ini', 'all' => 'Seluruh surat'];
-        $rangeLabel = $ids === []
-            ? $rangeLabels[$range]
-            : 'Pilihan ID: ' . implode(', ', $ids);
-        $rows = (new SuratModel(Connection::get()))->exportRows($fromDate, $throughDate, $ids);
-        $filename = 'surat-masuk-' . ($ids === [] ? $range : 'pilihan') . '-' . gmdate('Ymd');
+        $fromDate = null;
+        $throughDate = null;
+        $rangeLabel = 'Seluruh surat';
+        $slug = 'seluruhnya';
+        if ($range === 'week') {
+            $anchor = $this->exportDate($_POST['week_date'] ?? null, 'Tanggal minggu tidak valid.');
+            $monday = $anchor->modify('monday this week');
+            $sunday = $monday->modify('+6 days');
+            $fromDate = $monday->format('Y-m-d');
+            $throughDate = $sunday->format('Y-m-d');
+            $rangeLabel = 'Minggu ' . SuratExportFormatter::periodLabel($fromDate, $throughDate);
+            $slug = 'minggu-' . $monday->format('o') . '-w' . $monday->format('W');
+        } elseif ($range === 'month') {
+            $monthNumber = $this->exportInt($_POST['month_m'] ?? null, 1, 12, (int) date('n'), 'Bulan ekspor tidak valid.');
+            $yearNumber = $this->exportInt($_POST['month_y'] ?? null, 2000, 2100, (int) date('Y'), 'Tahun ekspor tidak valid.');
+            $value = sprintf('%04d-%02d', $yearNumber, $monthNumber);
+            $match = [$value, (string) $yearNumber, (string) $monthNumber];
+            $first = new \DateTimeImmutable($value . '-01');
+            $fromDate = $first->format('Y-m-d');
+            $throughDate = $first->modify('last day of this month')->format('Y-m-d');
+            $rangeLabel = SuratExportFormatter::monthLabel((int) $match[2], (int) $match[1]);
+            $slug = 'bulan-' . $value;
+        }
+        if ($ids !== []) {
+            $fromDate = null;
+            $throughDate = null;
+            $rangeLabel = 'Pilihan ID: ' . implode(', ', $ids);
+            $slug = 'pilihan';
+        }
 
-        return [$rows, $rangeLabel, $filename];
+        $rows = (new SuratModel(Connection::get()))->exportRows($fromDate, $throughDate, $ids);
+
+        return [$rows, $rangeLabel, 'surat-masuk-' . $slug . '-' . date('Ymd')];
+    }
+
+    private function exportInt(mixed $value, int $min, int $max, int $default, string $error): int
+    {
+        if ($value === null || $value === '') {
+            return $default;
+        }
+        $number = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => $min, 'max_range' => $max]]);
+        if ($number === false) {
+            http_response_code(400);
+            exit($error);
+        }
+
+        return $number;
+    }
+
+    private function exportDate(mixed $value, string $error): \DateTimeImmutable
+    {
+        if ($value === null || $value === '') {
+            return new \DateTimeImmutable('today');
+        }
+        $date = is_string($value) ? \DateTimeImmutable::createFromFormat('!Y-m-d', $value) : false;
+        if ($date === false || $date->format('Y-m-d') !== $value) {
+            http_response_code(400);
+            exit($error);
+        }
+
+        return $date;
     }
 
     public function create(): void

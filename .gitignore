@@ -14,3 +14,4 @@
 !/storage/private/.htaccess
 !/storage/logs/.gitkeep
 !/storage/private/.gitkeep
+/env

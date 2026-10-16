@@ -79,10 +79,11 @@ require APP_ROOT . '/includes/sidebar.php';
                 <label class="label" for="feedback-whatsapp">Nomor WhatsApp</label>
                 <input class="input" id="feedback-whatsapp" name="whatsapp" type="tel" inputmode="tel" maxlength="32" autocomplete="tel" placeholder="Contoh: +62 812 3456 7890" required>
             </div>
-            <div class="field feedback-photo-field">
-                <label class="label" for="feedback-photo">Foto atau screenshot (opsional)</label>
-                <input class="input" id="feedback-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp">
-                <small class="field-hint">JPEG, PNG, atau WebP. Maksimal 5 MB.</small>
+            <div class="field feedback-photo-field" data-feedback-photos data-max-files="5" data-max-bytes="5242880" data-max-total="12582912">
+                <label class="label" for="feedback-photo">Foto atau screenshot (opsional, maksimal 5)</label>
+                <input class="input" id="feedback-photo" name="photos[]" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+                <small class="field-hint">JPEG, PNG, atau WebP. Maksimal 5 foto, 5 MB per foto, total 12 MB. Foto besar dikecilkan otomatis.</small>
+                <ul class="feedback-photo-list" data-photo-list aria-live="polite"></ul>
             </div>
             <div class="field feedback-message-field">
                 <label class="label" for="feedback-message">Keterangan lengkap</label>

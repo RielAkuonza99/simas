@@ -9,7 +9,10 @@ use App\Security\AuditLogger;
 final class SuratService
 {
     public const SIFAT = ['Sangat Segera', 'Segera', 'Rahasia'];
-    public const TUJUAN_DISPOSISI = ['Kasubbag umum', 'Seketariat', 'Kepala'];
+    /** Saran yang muncul saat mengetik tujuan; isian tetap bebas (manual). */
+    public const TUJUAN_SARAN = ['Kasubbag umum', 'Sekertaris', 'Kepala Badan'];
+    public const TUJUAN_MAKS = 5;
+    public const TUJUAN_PANJANG_MAKS = 80;
     private const DRIVE_HOSTS = ['drive.google.com', 'docs.google.com'];
 
     public function __construct(private SuratModel $surat, private AuditLogger $audit)
@@ -73,10 +76,7 @@ final class SuratService
         foreach ($surat['disposisi'] ?? [] as $tahap => $row) {
             $form['disposisi'][$tahap] = [
                 'pejabat' => (string) ($row['pejabat'] ?? $row['asal'] ?? ''),
-                'tujuan' => array_values(array_intersect(
-                    self::TUJUAN_DISPOSISI,
-                    array_map('trim', explode(',', (string) ($row['tujuan'] ?? '')))
-                )),
+                'tujuan' => $this->splitTargets((string) ($row['tujuan'] ?? '')),
                 'tanggal' => (string) ($row['tanggal'] ?? ''),
                 'catatan' => (string) ($row['catatan'] ?? ''),
             ];
@@ -163,17 +163,34 @@ final class SuratService
             if (!is_array($targets)) {
                 $targets = is_scalar($targets) ? [(string) $targets] : [];
             }
-            if (count($targets) > 5) {
-                $errors[] = "Disposisi {$tahap}: pilih maksimal 5 tujuan.";
-            }
+            $seen = [];
+            $tooManyReported = false;
             foreach ($targets as $target) {
-                if (!is_string($target) || !in_array($target, self::TUJUAN_DISPOSISI, true)) {
-                    $errors[] = "Disposisi {$tahap}: tujuan tidak tersedia.";
+                if (!is_scalar($target)) {
                     continue;
                 }
-                if (!in_array($target, $row['tujuan'], true)) {
-                    $row['tujuan'][] = $target;
+                $target = trim((string) preg_replace('/\s+/u', ' ', (string) $target));
+                if ($target === '') {
+                    continue;
                 }
+                $key = mb_strtolower($target);
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                if (count($row['tujuan']) >= self::TUJUAN_MAKS) {
+                    if (!$tooManyReported) {
+                        $errors[] = "Disposisi {$tahap}: tujuan maksimal " . self::TUJUAN_MAKS . '.';
+                        $tooManyReported = true;
+                    }
+                    continue;
+                }
+                if (mb_strlen($target) > self::TUJUAN_PANJANG_MAKS) {
+                    $errors[] = "Disposisi {$tahap}: setiap tujuan maksimal " . self::TUJUAN_PANJANG_MAKS . ' karakter.';
+                } elseif (preg_match('/[,;\x00-\x1F]/u', $target) === 1) {
+                    $errors[] = "Disposisi {$tahap}: tujuan tidak boleh memuat koma atau titik koma. Tambahkan tujuan lain lewat tombol Tambah tujuan.";
+                }
+                $row['tujuan'][] = $target;
             }
 
             if ($row['pejabat'] === '' && $row['tujuan'] === [] && $row['tanggal'] === '' && $row['catatan'] === '') {
@@ -247,6 +264,20 @@ final class SuratService
         }
         
         return $deletedIds;
+    }
+
+    /** @return list<string> */
+    private function splitTargets(string $stored): array
+    {
+        $targets = [];
+        foreach (explode(',', $stored) as $target) {
+            $target = trim($target);
+            if ($target !== '' && !in_array($target, $targets, true)) {
+                $targets[] = $target;
+            }
+        }
+
+        return array_slice($targets, 0, self::TUJUAN_MAKS);
     }
 
     private function validDriveUrl(string $url): bool

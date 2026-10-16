@@ -371,13 +371,17 @@ final class SuratModel
             return [];
         }
 
-        $statement = $this->pdo->query(
-            'SELECT surat_id, tahap, asal, tujuan, tanggal, catatan, link_lampiran
-             FROM surat_disposisi ORDER BY surat_id, tahap'
-        );
         $dispositions = [];
-        foreach ($statement->fetchAll() as $row) {
-            $dispositions[(int) $row['surat_id']][(int) $row['tahap']] = $row;
+        foreach (array_chunk(array_map(static fn (array $letter): int => (int) $letter['id'], $letters), 500) as $chunk) {
+            $placeholders = implode(', ', array_fill(0, count($chunk), '?'));
+            $statement = $this->pdo->prepare(
+                'SELECT surat_id, tahap, asal, tujuan, tanggal, catatan, link_lampiran
+                 FROM surat_disposisi WHERE surat_id IN (' . $placeholders . ') ORDER BY surat_id, tahap'
+            );
+            $statement->execute($chunk);
+            foreach ($statement->fetchAll() as $row) {
+                $dispositions[(int) $row['surat_id']][(int) $row['tahap']] = $row;
+            }
         }
         foreach ($letters as &$letter) {
             $letter['disposisi'] = $dispositions[(int) $letter['id']] ?? [];

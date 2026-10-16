@@ -18,6 +18,12 @@ final class DeveloperFeedbackController
     {
         AuthMiddleware::requireLogin();
         \requirePost();
+        // Jika total unggahan melebihi post_max_size, PHP mengosongkan $_POST dan $_FILES sekaligus.
+        if ($_POST === [] && $_FILES === [] && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+            $_SESSION['flash'] = ['type' => 'danger', 'message' => 'Total ukuran foto melebihi batas unggahan server (' . ini_get('post_max_size') . '). Kurangi jumlah atau ukuran foto.'];
+            header('Location: ' . \url('panduan') . '#feedback-dev', true, 303);
+            exit;
+        }
         \validateCsrf();
 
         $storedPhotos = [];
@@ -62,6 +68,7 @@ final class DeveloperFeedbackController
                 'sender_email' => $senderEmail,
                 'whatsapp' => $whatsapp,
                 'message' => $message,
+                'photo_count' => count($storedPhotos),
             ], array_column($storedPhotos, 'path'));
             $feedback->updateEmailStatus($feedbackId, $result['status'], $result['http_status']);
 
@@ -80,7 +87,7 @@ final class DeveloperFeedbackController
 
             $_SESSION['flash'] = match ($result['status']) {
                 'SENT' => ['type' => 'success', 'message' => 'Feedback #' . $feedbackId . ' berhasil dikirim ke developer.'],
-                'PENDING' => ['type' => 'warn', 'message' => 'Feedback #' . $feedbackId . ' tersimpan, tetapi email belum dikirim karena Brevo belum dikonfigurasi.'],
+                'PENDING' => ['type' => 'warn', 'message' => 'Feedback #' . $feedbackId . ' tersimpan, tetapi email belum dikirim karena Brevo belum dikonfigurasi lengkap.'],
                 default => ['type' => 'warn', 'message' => 'Feedback #' . $feedbackId . ' tersimpan, tetapi email notifikasi gagal dikirim.'],
             };
         } catch (DomainException $error) {

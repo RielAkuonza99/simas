@@ -4,12 +4,15 @@ declare(strict_types=1);
 namespace App\Services;
 
 /**
- * Format data surat untuk ekspor CSV dan PDF supaya keduanya konsisten.
+ * Satu definisi tabel untuk ekspor surat masuk, dipakai bersama oleh Excel dan PDF
+ * supaya kedua berkas memuat kolom, urutan, dan isi yang sama persis.
  */
 final class SuratExportFormatter
 {
-    /** Titik koma agar langsung terbaca rapi di Excel dengan pengaturan regional Indonesia. */
-    public const CSV_DELIMITER = ';';
+    private const MONTHS = [
+        1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei', 6 => 'Juni',
+        7 => 'Juli', 8 => 'Agustus', 9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember',
+    ];
 
     public static function agenda(mixed $number): string
     {
@@ -20,140 +23,138 @@ final class SuratExportFormatter
     {
         $stage = (int) ($row['selesai_tahap'] ?? 0);
 
-        return $stage > 0 ? 'Selesai pada tahap ' . $stage : 'Belum selesai';
+        return $stage > 0 ? 'Selesai (disposisi ' . $stage . ')' : 'Belum selesai';
+    }
+
+    public static function date(?string $value): string
+    {
+        $value = trim((string) $value);
+
+        return $value === '' ? '' : \formatTanggal(substr($value, 0, 10));
+    }
+
+    /** "Oktober 2026" dari bulan 1-12 dan tahun. */
+    public static function monthLabel(int $month, int $year): string
+    {
+        return (self::MONTHS[$month] ?? '') . ' ' . $year;
+    }
+
+    /** "12/10/2026 – 18/10/2026" dari dua tanggal Y-m-d. */
+    public static function periodLabel(string $from, string $to): string
+    {
+        return self::date($from) . ' – ' . self::date($to);
     }
 
     /**
-     * Definisi kolom bersama untuk CSV dan Excel (judul, lebar kolom Excel, wrap, numerik).
+     * Kolom tabel: judul, lebar Excel (karakter), lebar PDF (persen), rata, dan wrap.
+     * Jumlah lebar PDF = 100.
      *
-     * @return list<array{title: string, width: int, wrap?: bool, numeric?: bool}>
+     * @return list<array{title: string, width: int, pdf: float, align?: string, wrap?: bool, numeric?: bool}>
      */
     public static function columns(): array
     {
         return [
-            ['title' => 'ID Surat', 'width' => 9],
-            ['title' => 'No Agenda', 'width' => 12],
-            ['title' => 'Kode Pencarian', 'width' => 19],
-            ['title' => 'Tanggal Diterima', 'width' => 15],
-            ['title' => 'Nomor Surat', 'width' => 16],
-            ['title' => 'Tanggal Surat', 'width' => 14],
-            ['title' => 'Asal Surat', 'width' => 26],
-            ['title' => 'Pengusul', 'width' => 20],
-            ['title' => 'Sifat', 'width' => 14],
-            ['title' => 'Hal', 'width' => 40, 'wrap' => true],
-            ['title' => 'Catatan Surat', 'width' => 30, 'wrap' => true],
-            ['title' => 'Bukti Surat', 'width' => 28],
-            ['title' => 'Status Disposisi', 'width' => 21],
-            ['title' => 'Jumlah Tahap Disposisi', 'width' => 12, 'numeric' => true],
-            ['title' => 'Pejabat Akhir', 'width' => 20],
-            ['title' => 'Tanggal Disposisi Akhir', 'width' => 16],
-            ['title' => 'Diselesaikan Pada', 'width' => 20],
-            ['title' => 'Dicatat Oleh', 'width' => 15],
-            ['title' => 'Bukti Disposisi Akhir', 'width' => 28],
-            ['title' => 'Rincian Disposisi', 'width' => 75, 'wrap' => true],
-            ['title' => 'Dibuat Oleh', 'width' => 15],
-            ['title' => 'Dibuat Pada', 'width' => 20],
-            ['title' => 'Diubah Pada', 'width' => 20],
+            ['title' => 'No', 'width' => 5, 'pdf' => 3.0, 'align' => 'center', 'numeric' => true],
+            ['title' => 'ID Surat', 'width' => 9, 'pdf' => 4.0, 'align' => 'center', 'numeric' => true],
+            ['title' => 'No Agenda', 'width' => 11, 'pdf' => 5.5, 'align' => 'center'],
+            ['title' => 'Tgl Diterima', 'width' => 13, 'pdf' => 6.5, 'align' => 'center'],
+            ['title' => 'Asal Surat', 'width' => 24, 'pdf' => 10.0, 'wrap' => true],
+            ['title' => 'Nomor Surat', 'width' => 20, 'pdf' => 8.5, 'wrap' => true],
+            ['title' => 'Tgl Surat', 'width' => 13, 'pdf' => 6.5, 'align' => 'center'],
+            ['title' => 'Sifat', 'width' => 13, 'pdf' => 6.0, 'align' => 'center'],
+            ['title' => 'Hal Surat', 'width' => 38, 'pdf' => 14.0, 'wrap' => true],
+            ['title' => 'Disposisi', 'width' => 56, 'pdf' => 21.0, 'wrap' => true],
+            ['title' => 'Status', 'width' => 22, 'pdf' => 9.0, 'wrap' => true],
+            ['title' => 'Bukti Dukung', 'width' => 34, 'pdf' => 6.0, 'wrap' => true],
         ];
     }
 
     /** @return list<string> */
-    public static function csvHeaders(): array
+    public static function headers(): array
     {
         return array_column(self::columns(), 'title');
     }
 
     /**
-     * CSV: satu baris per surat, tahap disposisi dipisah " | " agar tinggi baris tetap satu baris.
+     * Satu baris tabel. Nilai identik untuk Excel dan PDF; hanya penyajiannya yang berbeda.
      *
      * @return list<string>
      */
-    public static function csvRow(array $row): array
+    public static function row(array $row, int $number): array
     {
-        return array_map(self::safeCell(...), self::values($row, ' | '));
-    }
-
-    /**
-     * Excel: nilai apa adanya (sel teks tidak pernah dijalankan sebagai formula), tahap dipisah baris baru.
-     *
-     * @return list<string|int>
-     */
-    public static function xlsxRow(array $row): array
-    {
-        return array_map(
-            static fn (string|int $value): string|int => is_int($value) ? $value : trim(str_replace(["\r\n", "\r"], "\n", $value)),
-            self::values($row, "\n")
-        );
-    }
-
-    /** @return list<string|int> */
-    private static function values(array $row, string $stageSeparator): array
-    {
-        $dispositions = $row['disposisi'] ?? [];
+        $status = self::status($row);
+        if ((int) ($row['selesai_tahap'] ?? 0) > 0) {
+            $final = array_filter([
+                trim((string) ($row['pejabat_akhir'] ?? '')) !== '' ? 'Pejabat: ' . trim((string) $row['pejabat_akhir']) : '',
+                self::date($row['tanggal_akhir'] ?? null) !== '' ? 'Tanggal: ' . self::date($row['tanggal_akhir']) : '',
+            ]);
+            $status .= $final === [] ? '' : "\n" . implode("\n", $final);
+        }
 
         return [
-            '#' . (int) $row['id'],
+            (string) $number,
+            (string) (int) $row['id'],
             self::agenda($row['no'] ?? 0),
-            (string) ($row['kode_pencarian'] ?? ''),
-            (string) ($row['tanggal_masuk'] ?? ''),
-            (string) ($row['nomor_surat'] ?? ''),
-            (string) ($row['tanggal_surat'] ?? ''),
-            (string) ($row['surat_dari'] ?? ''),
-            (string) ($row['pengusul'] ?? ''),
-            (string) ($row['sifat'] ?? ''),
-            (string) ($row['hal'] ?? ''),
-            (string) ($row['catatan'] ?? ''),
-            (string) ($row['link_drive'] ?? ''),
-            self::status($row),
-            count($dispositions),
-            (string) ($row['pejabat_akhir'] ?? ''),
-            (string) ($row['tanggal_akhir'] ?? ''),
-            (string) ($row['selesai_pada'] ?? ''),
-            (string) ($row['dicatat_oleh'] ?? ''),
-            (string) ($row['link_selesai'] ?? ''),
-            self::dispositionText($dispositions, $stageSeparator),
-            (string) ($row['dibuat_oleh'] ?? ''),
-            (string) ($row['created_at'] ?? ''),
-            (string) ($row['updated_at'] ?? ''),
+            self::date($row['tanggal_masuk'] ?? null),
+            self::clean($row['surat_dari'] ?? ''),
+            self::clean($row['nomor_surat'] ?? ''),
+            self::date($row['tanggal_surat'] ?? null),
+            self::clean($row['sifat'] ?? ''),
+            self::clean($row['hal'] ?? ''),
+            self::dispositionText($row['disposisi'] ?? []),
+            $status,
+            trim((string) ($row['link_drive'] ?? '')),
         ];
     }
 
-    /** Rincian semua tahap dalam satu sel. */
-    public static function dispositionText(array $dispositions, string $separator = "\n"): string
+    /**
+     * Rincian semua tahap dalam satu sel:
+     *   1. 12/10/2026 · Pejabat → Tujuan A, Tujuan B
+     *      Catatan: ...
+     */
+    public static function dispositionText(array $dispositions): string
     {
         $lines = [];
         foreach ($dispositions as $item) {
-            $parts = [
-                trim((string) ($item['tanggal'] ?? '')),
-                trim((string) ($item['asal'] ?? '')) . ' → ' . trim((string) ($item['tujuan'] ?? '')),
-            ];
-            $note = trim((string) ($item['catatan'] ?? ''));
+            $route = array_filter([
+                trim((string) ($item['asal'] ?? '')),
+                trim((string) ($item['tujuan'] ?? '')),
+            ], static fn (string $part): bool => $part !== '');
+            $head = array_filter([
+                self::date($item['tanggal'] ?? null),
+                implode(' → ', $route),
+            ], static fn (string $part): bool => $part !== '');
+            $line = (int) ($item['tahap'] ?? 0) . '. ' . ($head === [] ? '-' : implode(' · ', $head));
+            $note = self::clean($item['catatan'] ?? '');
             if ($note !== '') {
-                $parts[] = $note;
+                $line .= "\n    Catatan: " . $note;
             }
             $link = trim((string) ($item['link_lampiran'] ?? ''));
             if ($link !== '') {
-                $parts[] = 'Lampiran: ' . $link;
+                $line .= "\n    Lampiran: " . $link;
             }
-            $lines[] = (int) ($item['tahap'] ?? 0) . '. ' . implode(' · ', array_filter($parts, static fn (string $part): bool => $part !== ''));
+            $lines[] = $line;
         }
 
-        return implode($separator, $lines);
+        return implode("\n", $lines);
     }
 
-    /** Rapikan teks dan cegah formula injection saat CSV dibuka di spreadsheet. */
-    public static function safeCell(mixed $value): string
+    /** Ringkasan untuk blok judul di kedua berkas. @return array<string, int> */
+    public static function summary(array $rows): array
     {
-        $text = is_scalar($value) ? trim(str_replace(["\r\n", "\r"], "\n", (string) $value)) : '';
+        $finished = 0;
+        foreach ($rows as $row) {
+            $finished += (int) ($row['selesai_tahap'] ?? 0) > 0 ? 1 : 0;
+        }
 
-        return preg_match('/^[\x00-\x20]*[=+@\-]/u', $text) ? "'" . $text : $text;
+        return ['Total surat' => count($rows), 'Selesai disposisi' => $finished, 'Belum selesai' => count($rows) - $finished];
     }
 
-    /** Potong tautan panjang agar tidak merusak tata letak PDF. */
-    public static function shortLink(?string $url, int $max = 60): string
+    /** Rapikan teks: samakan baris baru dan buang karakter kontrol. */
+    public static function clean(mixed $value): string
     {
-        $url = trim((string) $url);
+        $text = is_scalar($value) ? str_replace(["\r\n", "\r"], "\n", (string) $value) : '';
 
-        return $url === '' ? '' : mb_strimwidth($url, 0, $max, '…', 'UTF-8');
+        return trim(preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/u', '', $text) ?? '');
     }
 }

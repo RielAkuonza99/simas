@@ -41,7 +41,7 @@ try {
     );
     $baseDate = new DateTimeImmutable('today', new DateTimeZone('UTC'));
     $natures = ['Rahasia', 'Segera', 'Sangat Segera'];
-    $targets = ['Kepala, Seketariat', 'Kasubbag umum, Seketariat', 'Kepala'];
+    $targets = ['Kepala Badan, Sekertaris', 'Kasubbag umum, Sekertaris', 'Kepala Badan'];
 
     for ($index = 1; $index <= 100; $index++) {
         $receivedDate = $baseDate->modify('-' . ($index - 1) . ' days');

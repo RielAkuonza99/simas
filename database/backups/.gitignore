@@ -1,0 +1,5 @@
+# Keep local database dumps and backups out of version control.
+*
+!.gitignore
+!legacy-sql/
+!legacy-sql/**

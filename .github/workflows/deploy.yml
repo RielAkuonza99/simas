@@ -17,6 +17,8 @@ jobs:
             **/.git*
             **/.git*/**
             .env
+            env
+            env.example
             **/.env*
             **/*.pem
             **/*.key

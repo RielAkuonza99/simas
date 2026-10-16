@@ -4,6 +4,14 @@ require APP_ROOT . '/includes/sidebar.php';
 
 $f = $formData;
 $backUrl = url($editing ? 'surat/' . (int) $id : 'surat');
+$maxTujuan = \App\Services\SuratService::TUJUAN_MAKS;
+$tujuanRow = static fn (string $name, string $value): string =>
+    '<div class="target-row" data-target-row>'
+    . '<input class="input" type="text" list="tujuan-saran" maxlength="' . \App\Services\SuratService::TUJUAN_PANJANG_MAKS . '" autocomplete="off"'
+    . ' data-disposition-target="tujuan"' . ($name !== '' ? ' name="' . e($name) . '"' : '')
+    . ' value="' . e($value) . '" placeholder="Ketik tujuan disposisi">'
+    . '<button class="btn btn-quiet-danger btn-sm" type="button" data-remove-target aria-label="Hapus tujuan">' . ui_icon('trash') . '<span class="btn-label">Hapus</span></button>'
+    . '</div>';
 ?>
 <a class="crumb" href="<?= e($backUrl) ?>"><?= ui_icon('arrow-left') ?><?= $editing ? 'Kembali ke detail surat' : 'Kembali ke daftar' ?></a>
 <div class="page-head">
@@ -85,9 +93,13 @@ $backUrl = url($editing ? 'surat/' . (int) $id : 'surat');
     <section class="form-section" aria-labelledby="sec-disposisi">
         <div>
             <h3 class="form-section__title" id="sec-disposisi">Disposisi</h3>
-            <p class="form-section__desc">Tiga tahap awal, maksimal lima. Pilih satu atau beberapa tujuan yang tersedia.</p>
+            <p class="form-section__desc">Tiga tahap awal, maksimal lima. Ketik tujuan secara manual (maksimal <?= $maxTujuan ?> per tahap); saran muncul saat mengetik.</p>
         </div>
         <div class="form-section__body">
+            <datalist id="tujuan-saran">
+                <?php foreach (\App\Services\SuratService::TUJUAN_SARAN as $saran): ?><option value="<?= e($saran) ?>"></option><?php endforeach; ?>
+            </datalist>
+            <template data-target-template><?= $tujuanRow('', '') ?></template>
             <div class="steps" data-disposition-list>
             <?php foreach ($f['disposisi'] as $tahap => $d): ?>
                 <div class="step" data-disposition-step>
@@ -104,12 +116,16 @@ $backUrl = url($editing ? 'surat/' . (int) $id : 'surat');
                             <label class="label" for="d<?= $tahap ?>_tanggal" data-disposition-label="tanggal">Tanggal</label>
                             <input id="d<?= $tahap ?>_tanggal" data-disposition-field="tanggal" type="date" name="disposisi[<?= $tahap ?>][tanggal]" class="input" value="<?= e($d['tanggal']) ?>">
                         </div>
-                        <fieldset class="field c-12 target-options">
-                            <legend class="label">Tujuan</legend>
-                            <div class="target-options__list">
-                                <?php foreach (\App\Services\SuratService::TUJUAN_DISPOSISI as $tujuan): ?>
-                                    <label class="check-option"><input type="checkbox" data-disposition-target="tujuan" name="disposisi[<?= (int) $tahap ?>][tujuan][]" value="<?= e($tujuan) ?>" <?= in_array($tujuan, $d['tujuan'], true) ? 'checked' : '' ?>><span><?= e($tujuan) ?></span></label>
+                        <fieldset class="field c-12 target-options" data-target-group>
+                            <legend class="label">Tujuan <span class="label-note">(ketik manual, maksimal <?= $maxTujuan ?>)</span></legend>
+                            <div class="target-list" data-target-list>
+                                <?php foreach (($d['tujuan'] === [] ? [''] : array_slice($d['tujuan'], 0, $maxTujuan)) as $tujuan): ?>
+                                    <?= $tujuanRow('disposisi[' . (int) $tahap . '][tujuan][]', (string) $tujuan) ?>
                                 <?php endforeach; ?>
+                            </div>
+                            <div class="target-foot">
+                                <button class="btn btn-secondary btn-sm" type="button" data-add-target><?= ui_icon('plus') ?>Tambah tujuan</button>
+                                <span class="field-hint" data-target-count role="status" aria-live="polite"></span>
                             </div>
                         </fieldset>
                         <div class="field c-12">
@@ -139,12 +155,14 @@ $backUrl = url($editing ? 'surat/' . (int) $id : 'surat');
                             <label class="label" data-disposition-label="tanggal">Tanggal</label>
                             <input type="date" class="input" data-disposition-field="tanggal">
                         </div>
-                        <fieldset class="field c-12 target-options">
-                            <legend class="label">Tujuan</legend>
-                            <div class="target-options__list">
-                                <?php foreach (\App\Services\SuratService::TUJUAN_DISPOSISI as $tujuan): ?>
-                                    <label class="check-option"><input type="checkbox" data-disposition-target="tujuan" value="<?= e($tujuan) ?>"><span><?= e($tujuan) ?></span></label>
-                                <?php endforeach; ?>
+                        <fieldset class="field c-12 target-options" data-target-group>
+                            <legend class="label">Tujuan <span class="label-note">(ketik manual, maksimal <?= $maxTujuan ?>)</span></legend>
+                            <div class="target-list" data-target-list>
+                                <?= $tujuanRow('', '') ?>
+                            </div>
+                            <div class="target-foot">
+                                <button class="btn btn-secondary btn-sm" type="button" data-add-target><?= ui_icon('plus') ?>Tambah tujuan</button>
+                                <span class="field-hint" data-target-count role="status" aria-live="polite"></span>
                             </div>
                         </fieldset>
                         <div class="field c-12">

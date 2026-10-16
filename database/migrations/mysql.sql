@@ -1,15 +1,10 @@
--- Clean local database for the Bapperida letter application.
--- Import this file into a local MySQL or MariaDB server.
-
-CREATE DATABASE IF NOT EXISTS `bapperida_local`
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-USE `bapperida_local`;
+-- Consolidated MySQL bootstrap and upgrade script for the Bapperida letter application.
+-- Back up the database and select the target database before running.
 
 SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';
 SET time_zone = '+00:00';
 
-CREATE TABLE `users` (
+CREATE TABLE IF NOT EXISTS `users` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `username` varchar(50) NOT NULL,
   `password` varchar(255) NOT NULL,
@@ -22,13 +17,13 @@ CREATE TABLE `users` (
   KEY `idx_users_role_active` (`role`,`is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `surat_sequences` (
+CREATE TABLE IF NOT EXISTS `surat_sequences` (
   `id` tinyint(3) unsigned NOT NULL,
   `next_no` int(10) unsigned NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `surat_masuk` (
+CREATE TABLE IF NOT EXISTS `surat_masuk` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `kode_pencarian` varchar(20) DEFAULT NULL,
   `no` int(10) unsigned NOT NULL,
@@ -60,12 +55,12 @@ CREATE TABLE `surat_masuk` (
   CONSTRAINT `fk_surat_selesai_oleh` FOREIGN KEY (`selesai_oleh`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `surat_disposisi` (
+CREATE TABLE IF NOT EXISTS `surat_disposisi` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `surat_id` int(10) unsigned NOT NULL,
   `tahap` tinyint(3) unsigned NOT NULL,
   `asal` varchar(150) DEFAULT NULL,
-  `tujuan` varchar(150) DEFAULT NULL,
+  `tujuan` varchar(500) DEFAULT NULL,
   `tanggal` date DEFAULT NULL,
   `catatan` text DEFAULT NULL,
   `link_lampiran` varchar(500) DEFAULT NULL,
@@ -77,7 +72,7 @@ CREATE TABLE `surat_disposisi` (
   CONSTRAINT `fk_disposisi_surat` FOREIGN KEY (`surat_id`) REFERENCES `surat_masuk` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `surat_edit_requests` (
+CREATE TABLE IF NOT EXISTS `surat_edit_requests` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `surat_id` int(10) unsigned NOT NULL,
   `requester_id` int(10) unsigned DEFAULT NULL,
@@ -96,7 +91,7 @@ CREATE TABLE `surat_edit_requests` (
   CONSTRAINT `fk_edit_request_reviewer` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `admin_notifications` (
+CREATE TABLE IF NOT EXISTS `admin_notifications` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `recipient_id` int(10) unsigned NOT NULL,
   `sender_id` int(10) unsigned DEFAULT NULL,
@@ -116,7 +111,7 @@ CREATE TABLE `admin_notifications` (
   CONSTRAINT `fk_notification_edit_request` FOREIGN KEY (`edit_request_id`) REFERENCES `surat_edit_requests` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `auth_sessions` (
+CREATE TABLE IF NOT EXISTS `auth_sessions` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` int(10) unsigned DEFAULT NULL,
   `username` varchar(50) NOT NULL,
@@ -138,7 +133,7 @@ CREATE TABLE `auth_sessions` (
   CONSTRAINT `fk_auth_sessions_revoked_by_user` FOREIGN KEY (`revoked_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `archive_sync_queue` (
+CREATE TABLE IF NOT EXISTS `archive_sync_queue` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `surat_id` int(10) unsigned DEFAULT NULL,
   `search_id` varchar(20) NOT NULL,
@@ -159,7 +154,7 @@ CREATE TABLE `archive_sync_queue` (
   KEY `idx_archive_queue_surat` (`surat_id`,`search_id`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `audit_logs` (
+CREATE TABLE IF NOT EXISTS `audit_logs` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` int(10) unsigned DEFAULT NULL,
   `actor_username` varchar(50) DEFAULT NULL,
@@ -177,7 +172,28 @@ CREATE TABLE `audit_logs` (
   KEY `idx_audit_logs_module_action` (`module`,`action`,`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE `system_metric_samples` (
+CREATE TABLE IF NOT EXISTS `developer_feedback` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` int(10) unsigned DEFAULT NULL,
+  `sender_name` varchar(120) NOT NULL,
+  `sender_email` varchar(254) NOT NULL,
+  `whatsapp` varchar(32) NOT NULL,
+  `message` text NOT NULL,
+  `photo_filename` varchar(64) DEFAULT NULL,
+  `photos_json` json DEFAULT NULL,
+  `email_status` enum('PENDING','SENT','FAILED') NOT NULL DEFAULT 'PENDING',
+  `review_status` enum('NEW','REVIEWED','DONE') NOT NULL DEFAULT 'NEW',
+  `email_http_status` smallint unsigned DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_developer_feedback_created` (`created_at`,`id`),
+  KEY `idx_developer_feedback_review` (`review_status`,`created_at`),
+  KEY `idx_developer_feedback_user` (`user_id`,`created_at`),
+  CONSTRAINT `fk_developer_feedback_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `system_metric_samples` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `sampled_at` datetime NOT NULL,
   `php_memory_bytes` bigint(20) unsigned NOT NULL,
@@ -192,59 +208,90 @@ CREATE TABLE `system_metric_samples` (
   UNIQUE KEY `uq_system_metric_samples_sampled_at` (`sampled_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `users` (`id`, `username`, `password`, `role`, `is_active`, `created_at`, `updated_at`) VALUES
+INSERT IGNORE INTO `users` (`id`, `username`, `password`, `role`, `is_active`, `created_at`, `updated_at`) VALUES
 (1, 'RielAkuonza', '$2y$10$OIMl5eoMi8q0JOYPG1EKde8gUmK2DgdNhuBDAQNshyVvz/UAhxIUK', 'admin', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-INSERT INTO `surat_sequences` (`id`, `next_no`) VALUES (1, 1);
+INSERT IGNORE INTO `surat_sequences` (`id`, `next_no`) VALUES (1, 1);
 
-SET @demo_admin_id = (SELECT `id` FROM `users` WHERE `role` = 'admin' ORDER BY `id` LIMIT 1);
-SET @demo_start_no = (SELECT COALESCE(MAX(`no`), 0) + 1 FROM `surat_masuk`);
+SET @migration_sql = IF(
+  (SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'surat_masuk' AND column_name = 'selesai_tahap') = 0,
+  'ALTER TABLE `surat_masuk` ADD COLUMN `selesai_tahap` tinyint(3) unsigned NOT NULL DEFAULT 0 AFTER `link_drive`',
+  'SET @migration_noop = 1'
+);
+PREPARE migration_statement FROM @migration_sql;
+EXECUTE migration_statement;
+DEALLOCATE PREPARE migration_statement;
 
-INSERT INTO `surat_masuk`
-  (`no`, `tanggal_masuk`, `nomor_surat`, `tanggal_surat`, `sifat`, `surat_dari`, `hal`,
-   `selesai_tahap`, `selesai_oleh`, `selesai_pada`, `created_by`)
-SELECT @demo_start_no + sample.`n`,
-       DATE_SUB(CURDATE(), INTERVAL sample.`n` DAY),
-       CONCAT('DEMO/', LPAD(sample.`n` + 1, 3, '0')),
-       DATE_SUB(CURDATE(), INTERVAL sample.`n` + 2 DAY),
-       CASE MOD(sample.`n`, 3) WHEN 0 THEN 'Rahasia' WHEN 1 THEN 'Segera' ELSE 'Sangat Segera' END,
-       CONCAT('Instansi Demo ', LPAD(MOD(sample.`n`, 12) + 1, 2, '0')),
-       CONCAT('DEMO-', LPAD(sample.`n` + 1, 3, '0'), ' - Surat uji struktur agenda dan disposisi.'),
-       CASE WHEN MOD(sample.`n`, 2) = 0 THEN MOD(sample.`n`, 5) + 1 ELSE 0 END,
-       CASE WHEN MOD(sample.`n`, 2) = 0 THEN @demo_admin_id ELSE NULL END,
-       CASE WHEN MOD(sample.`n`, 2) = 0 THEN TIMESTAMP(DATE_SUB(CURDATE(), INTERVAL sample.`n` DAY), '09:00:00') ELSE NULL END,
-       @demo_admin_id
-FROM (
-  SELECT ones.`n` + tens.`n` * 10 AS `n`
-  FROM (SELECT 0 AS `n` UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) AS ones
-  CROSS JOIN (SELECT 0 AS `n` UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) AS tens
-) AS sample
-WHERE NOT EXISTS (SELECT 1 FROM `surat_masuk` WHERE `hal` LIKE 'DEMO-%');
+SET @migration_sql = IF(
+  (SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'surat_masuk' AND column_name = 'selesai_oleh') = 0,
+  'ALTER TABLE `surat_masuk` ADD COLUMN `selesai_oleh` int(10) unsigned DEFAULT NULL AFTER `selesai_tahap`',
+  'SET @migration_noop = 1'
+);
+PREPARE migration_statement FROM @migration_sql;
+EXECUTE migration_statement;
+DEALLOCATE PREPARE migration_statement;
 
-UPDATE `surat_masuk`
-SET `kode_pencarian` = CONCAT('BAPPERIDA-', LPAD(`id`, 4, '0'))
-WHERE `kode_pencarian` IS NULL AND `hal` LIKE 'DEMO-%';
+SET @migration_sql = IF(
+  (SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'surat_masuk' AND column_name = 'selesai_pada') = 0,
+  'ALTER TABLE `surat_masuk` ADD COLUMN `selesai_pada` datetime DEFAULT NULL AFTER `selesai_oleh`',
+  'SET @migration_noop = 1'
+);
+PREPARE migration_statement FROM @migration_sql;
+EXECUTE migration_statement;
+DEALLOCATE PREPARE migration_statement;
 
-INSERT IGNORE INTO `surat_disposisi` (`surat_id`, `tahap`, `asal`, `tujuan`, `tanggal`, `catatan`)
-SELECT s.`id`, stages.`tahap`,
-       CONCAT('Pejabat Demo ', LPAD(MOD(s.`no` - @demo_start_no, 100) + 1, 3, '0')),
-       CASE MOD(stages.`tahap`, 3)
-         WHEN 1 THEN 'Kepala, Seketariat'
-         WHEN 2 THEN 'Kasubbag umum, Seketariat'
-         ELSE 'Kepala'
-       END,
-       DATE_ADD(s.`tanggal_masuk`, INTERVAL stages.`tahap` DAY),
-       CONCAT('Catatan uji disposisi tahap ', stages.`tahap`)
-FROM `surat_masuk` s
-CROSS JOIN (
-  SELECT 1 AS `tahap` UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5
-) AS stages
-WHERE s.`hal` LIKE 'DEMO-%'
-  AND stages.`tahap` <= CASE
-    WHEN s.`selesai_tahap` > 0 THEN s.`selesai_tahap`
-    ELSE MOD(s.`no`, 3) + 1
-  END;
+SET @migration_sql = IF(
+  (SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'surat_masuk' AND column_name = 'link_selesai') = 0,
+  'ALTER TABLE `surat_masuk` ADD COLUMN `link_selesai` varchar(500) DEFAULT NULL AFTER `selesai_pada`',
+  'SET @migration_noop = 1'
+);
+PREPARE migration_statement FROM @migration_sql;
+EXECUTE migration_statement;
+DEALLOCATE PREPARE migration_statement;
 
-UPDATE `surat_sequences`
-SET `next_no` = (SELECT COALESCE(MAX(`no`), 0) + 1 FROM `surat_masuk`)
-WHERE `id` = 1;
+SET @migration_sql = IF(
+  (SELECT COUNT(*) FROM information_schema.statistics
+   WHERE table_schema = DATABASE() AND table_name = 'surat_masuk' AND index_name = 'idx_surat_selesai') = 0,
+  'ALTER TABLE `surat_masuk` ADD KEY `idx_surat_selesai` (`selesai_tahap`,`selesai_pada`)',
+  'SET @migration_noop = 1'
+);
+PREPARE migration_statement FROM @migration_sql;
+EXECUTE migration_statement;
+DEALLOCATE PREPARE migration_statement;
+
+SET @migration_sql = IF(
+  (SELECT COUNT(*) FROM information_schema.table_constraints
+   WHERE constraint_schema = DATABASE() AND table_name = 'surat_masuk'
+     AND constraint_name = 'fk_surat_selesai_oleh' AND constraint_type = 'FOREIGN KEY') = 0,
+  'ALTER TABLE `surat_masuk` ADD CONSTRAINT `fk_surat_selesai_oleh` FOREIGN KEY (`selesai_oleh`) REFERENCES `users` (`id`) ON DELETE SET NULL',
+  'SET @migration_noop = 1'
+);
+PREPARE migration_statement FROM @migration_sql;
+EXECUTE migration_statement;
+DEALLOCATE PREPARE migration_statement;
+
+ALTER TABLE `surat_disposisi`
+  MODIFY COLUMN `tujuan` varchar(500) DEFAULT NULL;
+
+UPDATE `surat_disposisi`
+SET `tujuan` = TRIM(BOTH ', ' FROM REPLACE(
+  REPLACE(CONCAT(', ', `tujuan`, ', '), ', Kepala, ', ', Kepala Badan, '),
+  ', Seketariat, ', ', Sekertaris, '
+))
+WHERE `tujuan` IS NOT NULL
+  AND (CONCAT(', ', `tujuan`, ', ') LIKE '%, Kepala, %'
+    OR CONCAT(', ', `tujuan`, ', ') LIKE '%, Seketariat, %');
+
+SET @migration_sql = IF(
+  (SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'developer_feedback' AND column_name = 'photos_json') = 0,
+  'ALTER TABLE `developer_feedback` ADD COLUMN `photos_json` json DEFAULT NULL AFTER `photo_filename`',
+  'SET @migration_noop = 1'
+);
+PREPARE migration_statement FROM @migration_sql;
+EXECUTE migration_statement;
+DEALLOCATE PREPARE migration_statement;

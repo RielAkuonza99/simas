@@ -60,7 +60,6 @@ $router->get('/surat', $surat('index'));
 $router->get('/riwayat-disposisi', $surat('dispositionHistory'));
 $router->post('/surat/hapus-terpilih', $surat('bulkDelete'));
 $router->get('/surat/ekspor/cari', $surat('searchExportCandidate'));
-$router->post('/surat/ekspor', $surat('exportCsv'));
 $router->post('/surat/ekspor/xlsx', $surat('exportXlsx'));
 $router->post('/surat/ekspor/pdf', $surat('exportPdf'));
 $router->get('/surat/tambah', $surat('create'));

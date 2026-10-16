@@ -9,7 +9,9 @@ final class BrevoFeedbackMailer
     public function send(array $feedback, array|string|null $attachmentPaths = null): array
     {
         $apiKey = trim((string) (app_env('BREVO_API_KEY') ?: ''));
-        if ($apiKey === '') {
+        $senderEmail = trim((string) (app_env('BREVO_SENDER_EMAIL') ?: ''));
+        $recipientEmail = trim((string) (app_env('DEVELOPER_FEEDBACK_EMAIL') ?: ''));
+        if ($apiKey === '' || $senderEmail === '' || $recipientEmail === '') {
             return ['status' => 'PENDING', 'http_status' => null, 'reason' => 'not_configured'];
         }
 
@@ -17,8 +19,6 @@ final class BrevoFeedbackMailer
             return ['status' => 'FAILED', 'http_status' => null, 'reason' => 'curl_unavailable'];
         }
 
-        $senderEmail = trim((string) (app_env('BREVO_SENDER_EMAIL') ?: 'primabapperida@gmail.com'));
-        $recipientEmail = trim((string) (app_env('DEVELOPER_FEEDBACK_EMAIL') ?: 'rielakuonza3@gmail.com'));
         $replyEmail = (string) ($feedback['sender_email'] ?? '');
         if (filter_var($senderEmail, FILTER_VALIDATE_EMAIL) === false
             || filter_var($recipientEmail, FILTER_VALIDATE_EMAIL) === false
@@ -40,6 +40,7 @@ final class BrevoFeedbackMailer
                 . '<p><strong>Email:</strong> ' . $escape($replyEmail) . '</p>'
                 . '<p><strong>WhatsApp:</strong> ' . $escape((string) ($feedback['whatsapp'] ?? '')) . '</p>'
                 . '<p><strong>ID feedback:</strong> ' . (int) ($feedback['id'] ?? 0) . '</p>'
+                . '<p><strong>Lampiran foto:</strong> ' . (int) ($feedback['photo_count'] ?? 0) . '</p>'
                 . '<hr><p>' . nl2br($escape($message), false) . '</p>',
         ];
 

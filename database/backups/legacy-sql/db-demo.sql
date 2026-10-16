@@ -1,10 +1,15 @@
--- Clean demo database for the Bapperida letter application.
+-- Clean local database for the Bapperida letter application.
 -- Import this file into a local MySQL or MariaDB server.
+
+CREATE DATABASE IF NOT EXISTS `bapperida_local`
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+USE `bapperida_local`;
 
 SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';
 SET time_zone = '+00:00';
 
-CREATE TABLE IF NOT EXISTS `users` (
+CREATE TABLE `users` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `username` varchar(50) NOT NULL,
   `password` varchar(255) NOT NULL,
@@ -17,13 +22,13 @@ CREATE TABLE IF NOT EXISTS `users` (
   KEY `idx_users_role_active` (`role`,`is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `surat_sequences` (
+CREATE TABLE `surat_sequences` (
   `id` tinyint(3) unsigned NOT NULL,
   `next_no` int(10) unsigned NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `surat_masuk` (
+CREATE TABLE `surat_masuk` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `kode_pencarian` varchar(20) DEFAULT NULL,
   `no` int(10) unsigned NOT NULL,
@@ -55,12 +60,12 @@ CREATE TABLE IF NOT EXISTS `surat_masuk` (
   CONSTRAINT `fk_surat_selesai_oleh` FOREIGN KEY (`selesai_oleh`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `surat_disposisi` (
+CREATE TABLE `surat_disposisi` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `surat_id` int(10) unsigned NOT NULL,
   `tahap` tinyint(3) unsigned NOT NULL,
   `asal` varchar(150) DEFAULT NULL,
-  `tujuan` varchar(150) DEFAULT NULL,
+  `tujuan` varchar(500) DEFAULT NULL,
   `tanggal` date DEFAULT NULL,
   `catatan` text DEFAULT NULL,
   `link_lampiran` varchar(500) DEFAULT NULL,
@@ -72,7 +77,7 @@ CREATE TABLE IF NOT EXISTS `surat_disposisi` (
   CONSTRAINT `fk_disposisi_surat` FOREIGN KEY (`surat_id`) REFERENCES `surat_masuk` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `surat_edit_requests` (
+CREATE TABLE `surat_edit_requests` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `surat_id` int(10) unsigned NOT NULL,
   `requester_id` int(10) unsigned DEFAULT NULL,
@@ -91,7 +96,7 @@ CREATE TABLE IF NOT EXISTS `surat_edit_requests` (
   CONSTRAINT `fk_edit_request_reviewer` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `admin_notifications` (
+CREATE TABLE `admin_notifications` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `recipient_id` int(10) unsigned NOT NULL,
   `sender_id` int(10) unsigned DEFAULT NULL,
@@ -111,7 +116,7 @@ CREATE TABLE IF NOT EXISTS `admin_notifications` (
   CONSTRAINT `fk_notification_edit_request` FOREIGN KEY (`edit_request_id`) REFERENCES `surat_edit_requests` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `auth_sessions` (
+CREATE TABLE `auth_sessions` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` int(10) unsigned DEFAULT NULL,
   `username` varchar(50) NOT NULL,
@@ -133,7 +138,7 @@ CREATE TABLE IF NOT EXISTS `auth_sessions` (
   CONSTRAINT `fk_auth_sessions_revoked_by_user` FOREIGN KEY (`revoked_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `archive_sync_queue` (
+CREATE TABLE `archive_sync_queue` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `surat_id` int(10) unsigned DEFAULT NULL,
   `search_id` varchar(20) NOT NULL,
@@ -154,7 +159,7 @@ CREATE TABLE IF NOT EXISTS `archive_sync_queue` (
   KEY `idx_archive_queue_surat` (`surat_id`,`search_id`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `audit_logs` (
+CREATE TABLE `audit_logs` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` int(10) unsigned DEFAULT NULL,
   `actor_username` varchar(50) DEFAULT NULL,
@@ -172,28 +177,7 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
   KEY `idx_audit_logs_module_action` (`module`,`action`,`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `developer_feedback` (
-  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` int(10) unsigned DEFAULT NULL,
-  `sender_name` varchar(120) NOT NULL,
-  `sender_email` varchar(254) NOT NULL,
-  `whatsapp` varchar(32) NOT NULL,
-  `message` text NOT NULL,
-  `photo_filename` varchar(64) DEFAULT NULL,
-  `photos_json` json DEFAULT NULL,
-  `email_status` enum('PENDING','SENT','FAILED') NOT NULL DEFAULT 'PENDING',
-  `review_status` enum('NEW','REVIEWED','DONE') NOT NULL DEFAULT 'NEW',
-  `email_http_status` smallint unsigned DEFAULT NULL,
-  `created_at` datetime NOT NULL,
-  `updated_at` datetime DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `idx_developer_feedback_created` (`created_at`,`id`),
-  KEY `idx_developer_feedback_review` (`review_status`,`created_at`),
-  KEY `idx_developer_feedback_user` (`user_id`,`created_at`),
-  CONSTRAINT `fk_developer_feedback_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS `system_metric_samples` (
+CREATE TABLE `system_metric_samples` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `sampled_at` datetime NOT NULL,
   `php_memory_bytes` bigint(20) unsigned NOT NULL,
@@ -208,10 +192,10 @@ CREATE TABLE IF NOT EXISTS `system_metric_samples` (
   UNIQUE KEY `uq_system_metric_samples_sampled_at` (`sampled_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT IGNORE INTO `users` (`id`, `username`, `password`, `role`, `is_active`, `created_at`, `updated_at`) VALUES
+INSERT INTO `users` (`id`, `username`, `password`, `role`, `is_active`, `created_at`, `updated_at`) VALUES
 (1, 'RielAkuonza', '$2y$10$OIMl5eoMi8q0JOYPG1EKde8gUmK2DgdNhuBDAQNshyVvz/UAhxIUK', 'admin', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-INSERT IGNORE INTO `surat_sequences` (`id`, `next_no`) VALUES (1, 1);
+INSERT INTO `surat_sequences` (`id`, `next_no`) VALUES (1, 1);
 
 SET @demo_admin_id = (SELECT `id` FROM `users` WHERE `role` = 'admin' ORDER BY `id` LIMIT 1);
 SET @demo_start_no = (SELECT COALESCE(MAX(`no`), 0) + 1 FROM `surat_masuk`);
@@ -243,11 +227,11 @@ WHERE `kode_pencarian` IS NULL AND `hal` LIKE 'DEMO-%';
 
 INSERT IGNORE INTO `surat_disposisi` (`surat_id`, `tahap`, `asal`, `tujuan`, `tanggal`, `catatan`)
 SELECT s.`id`, stages.`tahap`,
-      CONCAT('Pejabat Demo ', LPAD(MOD(s.`no`, 100) + 1, 3, '0')),
+       CONCAT('Pejabat Demo ', LPAD(MOD(s.`no` - @demo_start_no, 100) + 1, 3, '0')),
        CASE MOD(stages.`tahap`, 3)
-         WHEN 1 THEN 'Kepala, Seketariat'
-         WHEN 2 THEN 'Kasubbag umum, Seketariat'
-         ELSE 'Kepala'
+         WHEN 1 THEN 'Kepala Badan, Sekertaris'
+         WHEN 2 THEN 'Kasubbag umum, Sekertaris'
+         ELSE 'Kepala Badan'
        END,
        DATE_ADD(s.`tanggal_masuk`, INTERVAL stages.`tahap` DAY),
        CONCAT('Catatan uji disposisi tahap ', stages.`tahap`)
