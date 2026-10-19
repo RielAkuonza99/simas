@@ -114,6 +114,46 @@ $chart = static function (string $title, string $unit, array $history, string $k
     </div>
 </section>
 
+<?php if ($isAdmin): ?>
+    <section class="card" id="developer-versions" aria-labelledby="versions-heading">
+        <div class="card__head">
+            <div>
+                <h3 class="card__title" id="versions-heading">Dashboard versi website</h3>
+                <p class="card__desc">Informasi versi bersumber dari konfigurasi aplikasi dan tidak dapat diubah melalui halaman ini.</p>
+            </div>
+        </div>
+        <dl class="version-overview">
+            <div><dt>Versi website</dt><dd><?= e($updates['website']['version'] ?? 'Belum ditetapkan') ?></dd></div>
+            <div><dt>Rilis website</dt><dd><?= e($updates['website']['release'] ?? 'Belum ditetapkan') ?></dd></div>
+        </dl>
+        <ul class="version-list">
+            <?php foreach ($updates['features'] as $feature): ?>
+                <li class="version-list__item">
+                    <div class="version-list__content">
+                        <strong><?= e($feature['name'] ?? 'Fitur') ?></strong>
+                        <?php if (!empty($feature['components']) && is_array($feature['components'])): ?>
+                            <ul class="version-list__components">
+                                <?php foreach ($feature['components'] as $component): ?>
+                                    <li>
+                                        <?= e($component['name'] ?? 'Komponen') ?>: <?= e($component['version'] ?? 'Belum ditetapkan') ?>
+                                        <small>(revisi Git <?= (int) ($component['git_updates'] ?? 0) ?>)</small>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
+                        <?php if (isset($feature['release'])): ?>
+                            <small class="version-list__release">Rilis: <?= e($feature['release']) ?></small>
+                        <?php elseif (($feature['name'] ?? '') !== 'Website Update'): ?>
+                            <small class="version-list__release">Revisi Git ke-<?= (int) ($feature['git_updates'] ?? 0) ?></small>
+                        <?php endif; ?>
+                    </div>
+                    <span class="badge badge--info"><?= e($feature['version'] ?? 'Belum ditetapkan') ?></span>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+    </section>
+<?php endif; ?>
+
 <?php if ($isAdmin && is_array($metrics)): ?>
     <?php
     $current = $metrics['current'];

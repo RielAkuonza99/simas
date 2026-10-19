@@ -1,0 +1,71 @@
+{
+  "website": {
+    "version": "V2.05.3",
+    "release": "Rilis Git ke-11"
+  },
+  "features": [
+    {
+      "name": "Notifikasi",
+      "version": "V1.0",
+      "git_updates": 1
+    },
+    {
+      "name": "Feedback",
+      "version": "V4.0",
+      "git_updates": 4
+    },
+    {
+      "name": "Developer tools",
+      "version": "V1.0",
+      "git_updates": 1
+    },
+    {
+      "name": "Integrasi dan sinkronisasi",
+      "version": "V3.0",
+      "git_updates": 3
+    },
+    {
+      "name": "Log Sesi (Perangkat dan sesi)",
+      "version": "V2.0",
+      "git_updates": 2
+    },
+    {
+      "name": "Panduan",
+      "version": "V3.0",
+      "git_updates": 3
+    },
+    {
+      "name": "Account",
+      "version": "V2.0",
+      "git_updates": 2
+    },
+    {
+      "name": "Surat Masuk",
+      "version": "S-3.5",
+      "components": [
+        {
+          "name": "Metadata eksternal",
+          "version": "V1.0",
+          "git_updates": 3
+        },
+        {
+          "name": "Data Internal",
+          "version": "v2.0",
+          "git_updates": 5
+        }
+      ],
+      "git_updates": 5
+    },
+    {
+      "name": "Login",
+      "version": "V3.0",
+      "git_updates": 3
+    },
+    {
+      "name": "Website Update",
+      "version": "V2.05.3",
+      "release": "Rilis Git ke-11",
+      "git_updates": 11
+    }
+  ]
+}

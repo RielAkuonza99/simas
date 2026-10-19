@@ -43,6 +43,12 @@ final class SettingsController
         unset($_SESSION['flash']);
         $appLogPath = APP_ROOT . '/storage/logs/app.log';
         $appLogBytes = is_file($appLogPath) ? (int) filesize($appLogPath) : 0;
+        $updates = json_decode(
+            (string) file_get_contents(APP_ROOT . '/config/updates.json'),
+            true,
+            512,
+            JSON_THROW_ON_ERROR
+        );
 
         render('settings/index', [
             'pageTitle' => 'Pengaturan',
@@ -54,6 +60,7 @@ final class SettingsController
             'logs' => $logs,
             'notice' => $notice,
             'appLogBytes' => $appLogBytes,
+            'updates' => $updates,
         ]);
     }
 

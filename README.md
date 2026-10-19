@@ -33,15 +33,15 @@ app/
   Helpers/functions.php     e(), url(), redirect(), render(), csrfToken(), dll
       Views/               Template PHP per modul (auth, dashboard, surat, users,
                                                                    security, settings, archive-sync, disposition-history)
-bin/                   Script CLI (tidak bisa dijalankan lewat web)
+bin/                   Script CLI dan generator metadata versi untuk deploy
 database/              SQL database bersih, demo, upgrade hosting, dan metadata Supabase
-config/                app.php, security.php, auth.php, database.php
+config/                app.php, security.php, auth.php, database.php, updates.json
 includes/              header, sidebar, footer, ui (partial layout)
 public/                index.php, router.php (dev server), assets/ (css, js, font)
 routes/web.php         Semua definisi route
 storage/logs/          app.log, audit.log (diabaikan git)
 storage/private/       login-attempts.json (diabaikan git)
-.github/workflows/     deploy.yml
+.github/workflows/     deploy.yml (demo), deploy-production.yml (production manual)
 anti-slop/             Catatan audit UI dan follow-up (internal, tidak di-deploy)
 .agents .claude .gemini .opencode/   Skill AI tools (tidak di-deploy)
 ```
@@ -86,7 +86,7 @@ Browser → .htaccess (root) → public/index.php
 | `/pengguna` ... | GET, POST | admin | Kelola user (tambah, ubah, hapus) |
 | `/aktivitas` | GET | login | Aktivitas dan sesi perangkat |
 | `/sesi/{session_id}/cabut` | POST | login | Cabut sesi perangkat |
-| `/pengaturan` | GET | login | Pengaturan dan developer tools |
+| `/pengaturan` | GET | login | Profil, dashboard versi, dan developer tools (dashboard versi khusus admin) |
 | `/pengaturan/developer-tools/metrics` | GET | admin | Metrik sistem live |
 | `/pengaturan/developer-tools/logs/clear` | POST | admin | Kosongkan app.log |
 | `/sinkronisasi` | GET | admin | Status antrean sync Supabase |
@@ -236,6 +236,14 @@ php -S localhost:8000 -t public public/router.php
 
 Cek `http://localhost:8000/health`, harus menampilkan `"status": "ok"`.
 
+## Versi dan rilis
+
+Admin melihat versi website dan daftar versi fitur di **Pengaturan → Dashboard versi website**. Data dasarnya ada di `config/updates.json`; halaman web hanya menampilkan dan tidak mengubahnya.
+
+Kolom `version` dan `release` berisi label versi yang dikelola di JSON, misalnya `V2.05.3` atau `S-3.5`. Sebelum upload, `bin/build-update-metadata.mjs` mengisi `git_updates` dari riwayat commit: Website Update menghitung seluruh commit, sedangkan setiap fitur menghitung commit pada file yang dipetakan di skrip. Label manual tetap dipertahankan. Ini hitungan commit, bukan jumlah event push.
+
+Kedua workflow mengambil seluruh riwayat Git (`fetch-depth: 0`) dan membangun metadata tersebut hanya pada salinan kerja Actions untuk deployment. Hasil hitungan tidak ditulis balik ke Git; demo dan production pada commit yang sama mendapat metadata hitungan yang sama.
+
 ## Deploy
 
 Push ke `main` menjalankan `.github/workflows/deploy.yml` dan deploy otomatis ke hosting demo.
@@ -264,6 +272,7 @@ Catatan: file yang dihapus dari repo tidak otomatis terhapus di server. `storage
 
 ## Pembaruan terbaru
 
+- Dashboard versi website tersedia untuk admin di Pengaturan; label versi berasal dari `config/updates.json` dan hitungan revisi Git dibuat saat deploy.
 - Tujuan disposisi kini diketik manual (maksimal 5 per tahap) dan nama tujuan diperbarui; perubahan tercakup dalam `database/migrations/mysql.sql`.
 - Ekspor surat: per minggu, per bulan, atau seluruhnya, dalam Excel dan PDF dengan tabel identik. CSV dan opsi tahun dihapus.
 - Feedback: form kini benar-benar mengirim sampai 5 foto (sebelumnya field `photo` tidak cocok dengan `photos[]` di server) dan variabel Brevo didokumentasikan di `env.example`.

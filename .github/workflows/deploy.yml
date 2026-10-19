@@ -7,6 +7,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build version metadata
+        run: node bin/build-update-metadata.mjs --apply
       - uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -29,6 +33,7 @@ jobs:
             **/*secret*
             **/*credential*
             **/*private-key*
+            bin/build-update-metadata.mjs
             .gemini/**
             .claude/**
             .agents/**
