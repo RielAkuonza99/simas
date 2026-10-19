@@ -31,8 +31,7 @@ $chip = static function (string $label, string $removeKey) use ($filters): strin
         </div>
     <?php endif; ?>
 </div>
-<?= ui_alert($notice) ?>
-<?php if ($savedSuratId > 0): ?><div data-post-save-confirm="<?= $savedSuratId ?>" data-detail-url="<?= e(url('surat/' . $savedSuratId)) ?>" hidden></div><?php endif; ?>
+<?= ui_alert($notice, true, $savedSuratId > 0 ? 'Buka detail' : '', $savedSuratId > 0 ? url('surat/' . $savedSuratId) : '') ?>
 
 <form class="card card__body filter-card" method="get" action="<?= e(url('surat')) ?>" role="search">
     <div class="filter-grid">

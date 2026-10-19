@@ -137,13 +137,18 @@ final class BrevoFeedbackMailer
 
         $response = curl_exec($handle);
         $httpStatus = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+        $curlErrorCode = curl_errno($handle);
         curl_close($handle);
         if ($response === false) {
-            error_log('Brevo feedback send failed: transport_error');
+            error_log('Brevo feedback send failed: transport_error code=' . $curlErrorCode);
             return ['status' => 'FAILED', 'http_status' => null, 'reason' => 'transport_error'];
         }
         if ($httpStatus < 200 || $httpStatus >= 300) {
-            error_log('Brevo feedback send failed: HTTP ' . $httpStatus);
+            $providerResponse = json_decode($response, true);
+            $providerCode = is_array($providerResponse) && is_string($providerResponse['code'] ?? null)
+                ? preg_replace('/[^A-Za-z0-9_.-]/', '', $providerResponse['code'])
+                : '';
+            error_log('Brevo feedback send failed: HTTP ' . $httpStatus . ' provider_code=' . ($providerCode ?: 'unknown'));
             return ['status' => 'FAILED', 'http_status' => $httpStatus, 'reason' => 'provider_rejected'];
         }
 

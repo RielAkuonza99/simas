@@ -8,7 +8,7 @@ require APP_ROOT . '/includes/sidebar.php';
         <p class="page-sub">Panduan ringkas untuk <?= e($roleLabel) ?>, pencarian surat, dan bantuan developer.</p>
     </div>
 </div>
-<?= ui_alert($notice) ?>
+<?= ui_alert($notice, true) ?>
 
 <nav class="faq-jump" aria-label="Bagian panduan">
     <a href="#panduan-akses">Panduan <?= e($roleLabel) ?></a>

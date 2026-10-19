@@ -75,7 +75,7 @@ if (!function_exists('ui_badge')) {
 
 if (!function_exists('ui_alert')) {
     /** Renders a flash notice of shape ['type' => ..., 'message' => ...]. */
-    function ui_alert(?array $notice): string
+    function ui_alert(?array $notice, bool $asToast = false, string $actionLabel = '', string $actionUrl = ''): string
     {
         if (!$notice || trim((string) ($notice['message'] ?? '')) === '') {
             return '';
@@ -89,8 +89,12 @@ if (!function_exists('ui_alert')) {
         };
         $icon = ['ok' => 'check-circle', 'warn' => 'alert-triangle', 'bad' => 'alert-circle', 'info' => 'info'][$tone];
         $role = in_array($tone, ['warn', 'bad'], true) ? 'alert' : 'status';
+        $toastAttributes = $asToast ? ' data-toast-source data-toast-tone="' . e($tone) . '"' : '';
+        if ($asToast && $actionLabel !== '' && $actionUrl !== '') {
+            $toastAttributes .= ' data-toast-action-label="' . e($actionLabel) . '" data-toast-action-url="' . e($actionUrl) . '"';
+        }
 
-        return '<div class="alert alert--' . $tone . '" role="' . $role . '" data-dismissible>'
+        return '<div class="alert alert--' . $tone . '" role="' . $role . '" data-dismissible' . $toastAttributes . '>'
             . ui_icon($icon, 'alert__icon')
             . '<div class="alert__body">' . e($notice['message']) . '</div>'
             . '</div>';

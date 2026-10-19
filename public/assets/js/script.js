@@ -12,17 +12,25 @@
     const mobileQuery = window.matchMedia('(max-width: 1023.98px)');
 
     /* ---------- Toasts ---------- */
-    const toast = (message, { actionLabel = '', onAction = null, timeout = 5000 } = {}) => {
+    const toast = (message, { type = 'info', actionLabel = '', onAction = null, timeout = 5000 } = {}) => {
         const region = document.querySelector('[data-toast-region]');
         if (!region) return;
 
+        const tone = ['ok', 'warn', 'bad', 'info'].includes(type) ? type : 'info';
+        const icons = { ok: 'check-circle', warn: 'alert-triangle', bad: 'alert-circle', info: 'info' };
         const item = document.createElement('div');
-        item.className = 'toast';
-        item.setAttribute('role', 'status');
+        item.className = `toast toast--${tone}`;
+        item.setAttribute('role', ['warn', 'bad'].includes(tone) ? 'alert' : 'status');
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.classList.add('icon', 'toast__icon');
+        icon.setAttribute('aria-hidden', 'true');
+        const iconUse = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+        iconUse.setAttribute('href', `#i-${icons[tone]}`);
+        icon.append(iconUse);
         const text = document.createElement('span');
         text.className = 'toast__text';
         text.textContent = message;
-        item.append(text);
+        item.append(icon, text);
 
         const remove = () => item.remove();
         const dismiss = (distance = 0) => {
@@ -50,8 +58,28 @@
             });
             item.append(action);
         }
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'toast__close';
+        close.setAttribute('aria-label', 'Tutup pemberitahuan');
+        close.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>';
+        close.addEventListener('click', () => dismiss());
+        item.append(close);
         region.append(item);
         window.setTimeout(() => dismiss(), timeout);
+    };
+
+    const initFlashToasts = () => {
+        document.querySelectorAll('[data-toast-source]').forEach((source) => {
+            const actionUrl = source.dataset.toastActionUrl || '';
+            toast(source.querySelector('.alert__body')?.textContent.trim() || '', {
+                type: source.dataset.toastTone || 'info',
+                actionLabel: source.dataset.toastActionLabel || '',
+                onAction: actionUrl ? () => window.location.assign(actionUrl) : null,
+                timeout: actionUrl ? 9000 : 7000,
+            });
+            source.remove();
+        });
     };
 
     /* ---------- Loading bar between pages ---------- */
@@ -331,14 +359,6 @@
             if (!document.hidden) refresh();
         }, 20000);
         document.addEventListener('visibilitychange', refresh);
-    };
-
-    const initPostSaveConfirmation = () => {
-        const savedLetter = document.querySelector('[data-post-save-confirm]');
-        if (!savedLetter) return;
-        if (window.confirm('Surat berhasil disimpan. Buka detail surat sekarang?')) {
-            window.location.assign(savedLetter.dataset.detailUrl);
-        }
     };
 
     const initBulkSelection = () => {
@@ -1185,7 +1205,7 @@
         initSidebar();
         initAccountMenu();
         initNotifications();
-        initPostSaveConfirmation();
+        initFlashToasts();
         initBulkSelection();
         initExportDialog();
         initNotificationHistory();
