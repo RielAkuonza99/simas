@@ -238,9 +238,11 @@ Cek `http://localhost:8000/health`, harus menampilkan `"status": "ok"`.
 
 ## Deploy
 
-Push ke `main` → `.github/workflows/deploy.yml` → FTP ke `/htdocs/` di InfinityFree.
+Push ke `main` menjalankan `.github/workflows/deploy.yml` dan deploy otomatis ke hosting demo.
 
-Secrets GitHub: `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD`.
+Deploy production dijalankan manual dari tab **Actions** melalui workflow **Deploy to InfinityFree Production**, dengan branch `main` dipilih. Buat GitHub Environment bernama `production`, lalu isi environment secrets `FTP_SERVER_PRODUCTION`, `FTP_USERNAME_PRODUCTION`, dan `FTP_PASSWORD_PRODUCTION` menggunakan kredensial akun InfinityFree production. Workflow production tidak berjalan pada push biasa.
+
+Workflow demo tetap menggunakan repository secrets `FTP_SERVER`, `FTP_USERNAME`, dan `FTP_PASSWORD`.
 
 Tidak ikut di-deploy: `.git*`, `.env`, `.gemini`, `.claude`, `.agents`, `.opencode`, `anti-slop`, `database`, `storage/logs`, `storage/private`, semua `*.md`. Untuk database MySQL, backup lalu impor `database/migrations/mysql.sql`. Jangan impor `database/seeders/demo.sql` ke production. Jalankan `database/migrations/supabase-archive.sql` secara manual di Supabase sebelum versi aplikasi baru digunakan. Atur variabel Brevo dan API developer melalui File Manager sebelum memakai fitur terkait.
 

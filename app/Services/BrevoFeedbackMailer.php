@@ -29,19 +29,46 @@ final class BrevoFeedbackMailer
         $escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $name = (string) ($feedback['sender_name'] ?? '');
         $message = (string) ($feedback['message'] ?? '');
+        $whatsapp = (string) ($feedback['whatsapp'] ?? '');
+        $feedbackId = (int) ($feedback['id'] ?? 0);
+        $photoCount = (int) ($feedback['photo_count'] ?? 0);
         $subjectName = preg_replace('/[\r\n]+/', ' ', $name) ?? 'Pengguna';
+        $baseUrl = defined('APP_BASE_URL') ? rtrim((string) APP_BASE_URL, '/') : '';
+        $baseUrlScheme = strtolower((string) parse_url($baseUrl, PHP_URL_SCHEME));
+        $logoUrl = $baseUrlScheme === 'https' && filter_var($baseUrl, FILTER_VALIDATE_URL)
+            ? $baseUrl . '/assets/img/icon.svg'
+            : '';
+        $logo = $logoUrl !== ''
+            ? '<img src="' . $escape($logoUrl) . '" alt="Logo BAPPERIDA" width="56" height="56" style="display:block;width:56px;height:56px;border:0;border-radius:50%;">'
+            : '';
+        $messageHtml = nl2br($escape($message), false);
         $payload = [
-            'sender' => ['name' => 'Website SIMAS BAPPERIDA', 'email' => $senderEmail],
+            'sender' => ['name' => 'BAPPERIDA | Feedback SIMAS', 'email' => $senderEmail],
             'to' => [['email' => $recipientEmail]],
             'replyTo' => ['email' => $replyEmail, 'name' => $name],
             'subject' => '[Feedback SIMAS] ' . mb_substr($subjectName, 0, 80),
-            'htmlContent' => '<h2>Feedback untuk developer</h2>'
-                . '<p><strong>Dari:</strong> ' . $escape($name) . '</p>'
-                . '<p><strong>Email:</strong> ' . $escape($replyEmail) . '</p>'
-                . '<p><strong>WhatsApp:</strong> ' . $escape((string) ($feedback['whatsapp'] ?? '')) . '</p>'
-                . '<p><strong>ID feedback:</strong> ' . (int) ($feedback['id'] ?? 0) . '</p>'
-                . '<p><strong>Lampiran foto:</strong> ' . (int) ($feedback['photo_count'] ?? 0) . '</p>'
-                . '<hr><p>' . nl2br($escape($message), false) . '</p>',
+            'htmlContent' => '<!doctype html><html><body style="margin:0;padding:0;background-color:#f1f5f8;font-family:Arial,Helvetica,sans-serif;color:#182b3a;">'
+                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f1f5f8"><tr><td align="center" style="padding:28px 12px;">'
+                . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#ffffff;border:1px solid #d5e0e8;">'
+                . '<tr><td bgcolor="#153d7b" style="padding:22px 24px;color:#ffffff;">'
+                . '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
+                . ($logo !== '' ? '<td valign="middle" style="padding-right:16px;">' . $logo . '</td>' : '')
+                . '<td valign="middle"><div style="font-size:12px;line-height:18px;font-weight:bold;color:#e5f3fa;">BAPPERIDA</div>'
+                . '<div style="font-size:22px;line-height:28px;font-weight:bold;color:#ffffff;">Feedback SIMAS</div></td>'
+                . '</tr></table></td></tr>'
+                . '<tr><td style="padding:24px;">'
+                . '<div style="font-size:16px;line-height:24px;font-weight:bold;color:#153d7b;">Feedback baru dari ' . $escape($name) . '</div>'
+                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;border-collapse:collapse;">'
+                . '<tr><td style="padding:8px 0;border-bottom:1px solid #e3eaf0;font-size:13px;color:#486173;">Email</td><td style="padding:8px 0;border-bottom:1px solid #e3eaf0;font-size:13px;color:#182b3a;">' . $escape($replyEmail) . '</td></tr>'
+                . '<tr><td style="padding:8px 0;border-bottom:1px solid #e3eaf0;font-size:13px;color:#486173;">WhatsApp</td><td style="padding:8px 0;border-bottom:1px solid #e3eaf0;font-size:13px;color:#182b3a;">' . $escape($whatsapp) . '</td></tr>'
+                . '<tr><td style="padding:8px 0;border-bottom:1px solid #e3eaf0;font-size:13px;color:#486173;">ID feedback</td><td style="padding:8px 0;border-bottom:1px solid #e3eaf0;font-size:13px;color:#182b3a;">' . $feedbackId . '</td></tr>'
+                . '<tr><td style="padding:8px 0;font-size:13px;color:#486173;">Lampiran foto</td><td style="padding:8px 0;font-size:13px;color:#182b3a;">' . $photoCount . '</td></tr>'
+                . '</table><div style="margin-top:22px;padding:16px;background-color:#f4f8fa;border-left:4px solid #0781c3;font-size:14px;line-height:22px;color:#182b3a;">' . $messageHtml . '</div>'
+                . '</td></tr><tr><td style="padding:14px 24px;border-top:1px solid #e3eaf0;font-size:12px;line-height:18px;color:#486173;">Pesan otomatis dari formulir feedback SIMAS BAPPERIDA.</td></tr>'
+                . '</table></td></tr></table></body></html>',
+            'textContent' => "Feedback baru dari {$name}\n\n"
+                . "Email: {$replyEmail}\nWhatsApp: {$whatsapp}\nID feedback: {$feedbackId}\nLampiran foto: {$photoCount}\n\n"
+                . "Pesan:\n{$message}\n\nPesan otomatis dari formulir feedback SIMAS BAPPERIDA.",
         ];
 
         if (is_string($attachmentPaths)) {

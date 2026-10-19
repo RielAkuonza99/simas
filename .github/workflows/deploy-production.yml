@@ -1,0 +1,44 @@
+name: Deploy to InfinityFree Production
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER_PRODUCTION }}
+          username: ${{ secrets.FTP_USERNAME_PRODUCTION }}
+          password: ${{ secrets.FTP_PASSWORD_PRODUCTION }}
+          server-dir: /htdocs/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            .env
+            env
+            env.example
+            **/.env*
+            **/*.pem
+            **/*.key
+            **/*.p12
+            **/*.pfx
+            **/*.ppk
+            **/*.jks
+            **/*secret*
+            **/*credential*
+            **/*private-key*
+            .gemini/**
+            .claude/**
+            .agents/**
+            .opencode/**
+            anti-slop/**
+            database/**
+            .github/**
+            storage/logs/**
+            storage/private/**
+            *.sql
+            *.md
