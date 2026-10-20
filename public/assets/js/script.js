@@ -1055,29 +1055,42 @@
         let files = [];
         const size = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
-        const shrink = (file) => new Promise((resolve) => {
-            if (file.size <= 1048576) { resolve(file); return; }
-            const url = URL.createObjectURL(file);
-            const img = new Image();
-            img.onload = () => {
-                URL.revokeObjectURL(url);
+        /* Baca berkas sebagai data: URL. CSP situs mengizinkan data: untuk gambar, jadi preview
+           dan kompresi tetap jalan walau URL blob: diblokir oleh kebijakan keamanan. */
+        const readDataUrl = (file) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+        });
+        const previewCache = new WeakMap();
+        const previewUrl = (file) => {
+            if (!previewCache.has(file)) previewCache.set(file, readDataUrl(file).catch(() => ''));
+            return previewCache.get(file);
+        };
+
+        const shrink = async (file) => {
+            if (file.size <= 1048576) return file;
+            try {
+                const img = new Image();
+                img.src = await readDataUrl(file);
+                await img.decode();
                 const scale = Math.min(1, 1920 / Math.max(img.width, img.height));
                 const canvas = document.createElement('canvas');
                 canvas.width = Math.round(img.width * scale);
                 canvas.height = Math.round(img.height * scale);
                 const ctx = canvas.getContext('2d');
-                if (!ctx) { resolve(file); return; }
+                if (!ctx) return file;
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                canvas.toBlob((blob) => {
-                    if (!blob || blob.size >= file.size) { resolve(file); return; }
-                    resolve(new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg', lastModified: Date.now() }));
-                }, 'image/jpeg', 0.82);
-            };
-            img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
-            img.src = url;
-        });
+                const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+                if (!blob || blob.size >= file.size) return file;
+                return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg', lastModified: Date.now() });
+            } catch {
+                return file;
+            }
+        };
 
         const sync = () => {
             const transfer = new DataTransfer();
@@ -1088,8 +1101,9 @@
                 const li = document.createElement('li');
                 const img = document.createElement('img');
                 img.alt = '';
-                img.src = URL.createObjectURL(file);
-                img.onload = () => URL.revokeObjectURL(img.src);
+                img.width = 56;
+                img.height = 56;
+                previewUrl(file).then((url) => { if (url) img.src = url; });
                 const text = document.createElement('span');
                 text.className = 'photo-name';
                 text.textContent = file.name;

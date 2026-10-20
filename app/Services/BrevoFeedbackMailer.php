@@ -5,7 +5,7 @@ namespace App\Services;
 
 final class BrevoFeedbackMailer
 {
-    /** @return array{status: string, http_status: ?int, reason: string} */
+    /** @return array{status: string, http_status: ?int, reason: string, detail?: string} */
     public function send(array $feedback, array|string|null $attachmentPaths = null): array
     {
         $apiKey = trim((string) (app_env('BREVO_API_KEY') ?: ''));
@@ -105,53 +105,151 @@ final class BrevoFeedbackMailer
                 'content' => base64_encode($contents),
             ];
         }
-        if ($attachments !== []) {
+
+        // Batas lampiran API transaksional Brevo sekitar 4 MB. Di atas batas aman, kirim tanpa lampiran
+        // (foto tetap tersimpan di SIMAS) daripada membuat seluruh email gagal.
+        $withAttachments = $attachments !== [] && $totalBytes <= self::SAFE_ATTACHMENT_BYTES;
+        if ($withAttachments) {
             $payload['attachment'] = $attachments;
+        } elseif ($attachments !== []) {
+            $payload = $this->withoutAttachmentNote($payload, count($attachments));
         }
 
+        $result = $this->post($apiKey, $payload, $feedbackId);
+
+        // Brevo menolak karena lampiran (400/413)? Coba sekali lagi tanpa lampiran supaya pesan tetap sampai.
+        if ($result['status'] === 'FAILED' && $withAttachments && in_array($result['http_status'], [400, 413], true)) {
+            unset($payload['attachment']);
+            $payload = $this->withoutAttachmentNote($payload, count($attachments));
+            $retry = $this->post($apiKey, $payload, $feedbackId);
+            if ($retry['status'] === 'SENT') {
+                $retry['reason'] = 'sent_without_attachments';
+                return $retry;
+            }
+            return $retry;
+        }
+
+        return $result;
+    }
+
+    private const SAFE_ATTACHMENT_BYTES = 2621440;
+
+    /** @param array<string, mixed> $payload */
+    private function withoutAttachmentNote(array $payload, int $count): array
+    {
+        $note = "Catatan: {$count} foto tidak ikut terlampir pada email ini. Foto tersimpan di SIMAS dan dapat dibuka lewat API developer.";
+        $payload['textContent'] = ($payload['textContent'] ?? '') . "\n\n" . $note;
+        $payload['htmlContent'] = str_replace(
+            '</body>',
+            '<p style="margin:12px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#486173;">'
+                . htmlspecialchars($note, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p></body>',
+            (string) ($payload['htmlContent'] ?? '')
+        );
+
+        return $payload;
+    }
+
+    /**
+     * Kirim ke Brevo dan catat penyebab kegagalan ke storage/logs/app.log
+     * (error_log() PHP tidak bisa dibaca di hosting bersama).
+     *
+     * @param array<string, mixed> $payload
+     * @return array{status: string, http_status: ?int, reason: string, detail?: string}
+     */
+    private function post(string $apiKey, array $payload, int $feedbackId): array
+    {
         try {
             $body = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         } catch (\JsonException) {
             return ['status' => 'FAILED', 'http_status' => null, 'reason' => 'payload_invalid'];
         }
 
-        $handle = curl_init('https://api.brevo.com/v3/smtp/email');
-        if ($handle === false) {
-            return ['status' => 'FAILED', 'http_status' => null, 'reason' => 'curl_init_failed'];
+        $response = false;
+        $httpStatus = 0;
+        $curlErrorCode = 0;
+        $curlError = '';
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            $handle = curl_init('https://api.brevo.com/v3/smtp/email');
+            if ($handle === false) {
+                return ['status' => 'FAILED', 'http_status' => null, 'reason' => 'curl_init_failed'];
+            }
+            curl_setopt_array($handle, [
+                CURLOPT_POST => true,
+                CURLOPT_HTTPHEADER => [
+                    'api-key: ' . $apiKey,
+                    'Content-Type: application/json',
+                    'Accept: application/json',
+                ],
+                CURLOPT_POSTFIELDS => $body,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_TIMEOUT => 25,
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
+            ]);
+            $response = curl_exec($handle);
+            $httpStatus = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+            $curlErrorCode = curl_errno($handle);
+            $curlError = curl_error($handle);
+            curl_close($handle);
+            if ($response !== false) {
+                break;
+            }
         }
-        curl_setopt_array($handle, [
-            CURLOPT_POST => true,
-            CURLOPT_HTTPHEADER => [
-                'api-key: ' . $apiKey,
-                'Content-Type: application/json',
-                'Accept: application/json',
-            ],
-            CURLOPT_POSTFIELDS => $body,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_TIMEOUT => 20,
-            CURLOPT_FOLLOWLOCATION => false,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-        ]);
 
-        $response = curl_exec($handle);
-        $httpStatus = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
-        $curlErrorCode = curl_errno($handle);
-        curl_close($handle);
         if ($response === false) {
-            error_log('Brevo feedback send failed: transport_error code=' . $curlErrorCode);
-            return ['status' => 'FAILED', 'http_status' => null, 'reason' => 'transport_error'];
+            $detail = 'curl#' . $curlErrorCode . ' ' . mb_substr($curlError, 0, 120);
+            $this->log($feedbackId, 'transport_error ' . $detail);
+            return ['status' => 'FAILED', 'http_status' => null, 'reason' => 'transport_error', 'detail' => $detail];
         }
+
         if ($httpStatus < 200 || $httpStatus >= 300) {
-            $providerResponse = json_decode($response, true);
+            $providerResponse = json_decode((string) $response, true);
             $providerCode = is_array($providerResponse) && is_string($providerResponse['code'] ?? null)
-                ? preg_replace('/[^A-Za-z0-9_.-]/', '', $providerResponse['code'])
+                ? (string) preg_replace('/[^A-Za-z0-9_.-]/', '', $providerResponse['code'])
                 : '';
-            error_log('Brevo feedback send failed: HTTP ' . $httpStatus . ' provider_code=' . ($providerCode ?: 'unknown'));
-            return ['status' => 'FAILED', 'http_status' => $httpStatus, 'reason' => 'provider_rejected'];
+            $providerMessage = is_array($providerResponse) && is_string($providerResponse['message'] ?? null)
+                ? mb_substr(trim((string) preg_replace('/\s+/', ' ', $providerResponse['message'])), 0, 220)
+                : mb_substr(trim(strip_tags((string) $response)), 0, 220);
+            $detail = $this->describe($httpStatus, $providerCode, $providerMessage);
+            $this->log($feedbackId, 'HTTP ' . $httpStatus . ' code=' . ($providerCode ?: 'unknown') . ' message=' . $providerMessage);
+
+            return ['status' => 'FAILED', 'http_status' => $httpStatus, 'reason' => 'provider_rejected', 'detail' => $detail];
         }
 
         return ['status' => 'SENT', 'http_status' => $httpStatus, 'reason' => 'sent'];
+    }
+
+    /** Terjemahan singkat penyebab yang paling sering terjadi, supaya langsung terbaca di notifikasi. */
+    private function describe(int $httpStatus, string $code, string $message): string
+    {
+        $lower = strtolower($message);
+        if ($httpStatus === 401 && (str_contains($lower, 'ip') || str_contains($lower, 'unrecognised'))) {
+            return 'HTTP 401: IP server hosting belum diizinkan di Brevo (Security > Authorised IPs)';
+        }
+        if ($httpStatus === 401) {
+            return 'HTTP 401: API key Brevo ditolak (salah, dicabut, atau bukan API v3)';
+        }
+        if ($httpStatus === 400 && (str_contains($lower, 'sender') || str_contains($lower, 'not valid') || str_contains($lower, 'not active'))) {
+            return 'HTTP 400: email pengirim belum diverifikasi di Brevo (Senders, Domains & Dedicated IPs)';
+        }
+        if ($httpStatus === 402 || $httpStatus === 403) {
+            return 'HTTP ' . $httpStatus . ': akun Brevo dibatasi atau SMTP transaksional belum aktif';
+        }
+        if ($httpStatus === 429) {
+            return 'HTTP 429: kuota kirim Brevo terlampaui';
+        }
+
+        return 'HTTP ' . $httpStatus . ($code !== '' ? ' ' . $code : '');
+    }
+
+    private function log(int $feedbackId, string $message): void
+    {
+        $line = 'Brevo feedback #' . $feedbackId . ' gagal: ' . $message;
+        if (function_exists('app_early_log')) {
+            app_early_log($line);
+        }
+        error_log($line);
     }
 }

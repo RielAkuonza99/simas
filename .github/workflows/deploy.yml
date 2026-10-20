@@ -11,6 +11,19 @@ jobs:
           fetch-depth: 0
       - name: Build version metadata
         run: node bin/build-update-metadata.mjs --apply
+      # InfinityFree tidak punya Composer, dan /vendor/ ada di .gitignore.
+      # Tanpa langkah ini folder vendor tidak pernah terunggah dan ekspor PDF (Dompdf) gagal.
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+      - name: Install dependensi PHP (tanpa dev)
+        run: |
+          composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+          # Buang berkas yang tidak dipakai saat runtime supaya unggahan FTP lebih ringan.
+          find vendor -type d \( -iname tests -o -iname test -o -iname docs -o -iname doc -o -iname examples \) -prune -exec rm -rf {} +
+          test -f vendor/autoload.php && test -d vendor/dompdf/dompdf/src
       - uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}

@@ -281,3 +281,12 @@ Catatan: file yang dihapus dari repo tidak otomatis terhapus di server. `storage
 - Status login pengguna kini menampilkan semua akun yang sedang aktif, bukan hanya akun sendiri.
 - Tampilan kartu/tabel memanjang ke samping (geser horizontal) di semua ukuran layar.
 - Cache-busting aset otomatis. Skema dan upgrade MySQL tersedia di `database/migrations/mysql.sql`; `database/seeders/demo.sql` menambahkan data demo.
+
+
+## Catatan deploy (penting)
+
+- Folder `vendor/` ada di `.gitignore` dan InfinityFree tidak punya Composer. Workflow `.github/workflows/deploy.yml`
+  menjalankan `composer install --no-dev` lalu mengunggah `vendor/` lewat FTP. Tanpa itu ekspor PDF gagal
+  (`Failed opening required .../vendor/autoload.php`).
+- Penyebab kegagalan email feedback (Brevo) kini dicatat di `storage/logs/app.log` dan ditampilkan singkat pada notifikasi.
+- CSP (`config/security.php`) harus mengizinkan `blob:` dan `data:` pada `img-src` agar pratinjau foto feedback tampil.

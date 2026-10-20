@@ -149,35 +149,66 @@ final class SuratController
             http_response_code(413);
             exit('Terlalu banyak surat untuk satu PDF (' . count($rows) . '; maksimal ' . self::PDF_MAX_ROWS . '). Pilih periode yang lebih sempit atau gunakan ekspor Excel.');
         }
-        require_once APP_ROOT . '/vendor/autoload.php';
+        $autoload = APP_ROOT . '/vendor/autoload.php';
+        if (!is_file($autoload)) {
+            app_early_log('PDF export: vendor/autoload.php tidak ada di server. Jalankan composer install atau unggah folder vendor/.');
+            http_response_code(500);
+            exit('Pustaka PDF (Dompdf) belum terpasang di server. Hubungi developer, atau gunakan ekspor Excel sementara.');
+        }
+        require_once $autoload;
 
-        $options = new \Dompdf\Options();
-        $options->set('isRemoteEnabled', false);
-        $options->set('isPhpEnabled', false);
-        $options->setChroot(APP_ROOT);
-        $pdf = new \Dompdf\Dompdf($options);
-        ob_start();
-        render('surat/export-pdf', [
-            'rows' => $rows,
-            'rangeLabel' => $rangeLabel,
-            'generatedAt' => date('d/m/Y H:i'),
-        ]);
-        $html = (string) ob_get_clean();
-        $pdf->loadHtml($html, 'UTF-8');
-        $pdf->setPaper('A4', 'landscape');
-        $pdf->render();
+        // Dompdf butuh folder tulis untuk cache font dan berkas sementara; hosting bersama sering menolak tulis di vendor/.
+        $cacheDir = APP_ROOT . '/storage/cache/dompdf';
+        if (!is_dir($cacheDir) && !@mkdir($cacheDir, 0755, true) && !is_dir($cacheDir)) {
+            $cacheDir = sys_get_temp_dir();
+        }
+        @ini_set('memory_limit', '256M');
+        @set_time_limit(120);
 
-        $canvas = $pdf->getCanvas();
-        $font = $pdf->getFontMetrics()->getFont('DejaVu Sans');
-        $footerY = $canvas->get_height() - 24;
-        $canvas->page_text(22, $footerY, 'Laporan Surat Masuk BAPPERIDA · ' . mb_strimwidth($rangeLabel, 0, 90, '…', 'UTF-8'), $font, 7, [0.4, 0.45, 0.5]);
-        $canvas->page_text($canvas->get_width() - 100, $footerY, 'Halaman {PAGE_NUM} dari {PAGE_COUNT}', $font, 7, [0.4, 0.45, 0.5]);
+        try {
+            $options = new \Dompdf\Options();
+            $options->set('isRemoteEnabled', false);
+            $options->set('isPhpEnabled', false);
+            $options->set('isFontSubsettingEnabled', true);
+            $options->set('tempDir', $cacheDir);
+            $options->set('fontCache', $cacheDir);
+            $options->setChroot([APP_ROOT, $cacheDir]);
+            $pdf = new \Dompdf\Dompdf($options);
+            ob_start();
+            try {
+                render('surat/export-pdf', [
+                    'rows' => $rows,
+                    'rangeLabel' => $rangeLabel,
+                    'generatedAt' => date('d/m/Y H:i'),
+                ]);
+            } finally {
+                $html = (string) ob_get_clean();
+            }
+            $pdf->loadHtml($html, 'UTF-8');
+            $pdf->setPaper('A4', 'landscape');
+            $pdf->render();
 
+            $canvas = $pdf->getCanvas();
+            $font = $pdf->getFontMetrics()->getFont('DejaVu Sans');
+            $footerY = $canvas->get_height() - 24;
+            $canvas->page_text(22, $footerY, 'Laporan Surat Masuk BAPPERIDA · ' . mb_strimwidth($rangeLabel, 0, 90, '…', 'UTF-8'), $font, 7, [0.4, 0.45, 0.5]);
+            $canvas->page_text($canvas->get_width() - 100, $footerY, 'Halaman {PAGE_NUM} dari {PAGE_COUNT}', $font, 7, [0.4, 0.45, 0.5]);
+            $output = $pdf->output();
+        } catch (\Throwable $error) {
+            app_early_log('PDF export gagal: ' . $error->getMessage() . ' in ' . $error->getFile() . ':' . $error->getLine());
+            http_response_code(500);
+            exit('PDF gagal dibuat. Coba periode yang lebih sempit atau gunakan ekspor Excel.');
+        }
+
+        // Buang buffer sisa supaya byte PDF tidak tercemar spasi/BOM dari output lain.
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
         header('Content-Type: application/pdf');
         header('Content-Disposition: attachment; filename="' . $filename . '.pdf"');
         header('Cache-Control: no-store, private');
         header('X-Content-Type-Options: nosniff');
-        echo $pdf->output();
+        echo $output;
         exit;
     }
 

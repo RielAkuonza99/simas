@@ -85,10 +85,16 @@ final class DeveloperFeedbackController
                 error_log('Developer feedback audit record failed.');
             }
 
-            $_SESSION['flash'] = match ($result['status']) {
-                'SENT' => ['type' => 'success', 'message' => 'Feedback #' . $feedbackId . ' berhasil dikirim ke developer.'],
-                'PENDING' => ['type' => 'warn', 'message' => 'Feedback #' . $feedbackId . ' tersimpan, tetapi email belum dikirim karena Brevo belum dikonfigurasi lengkap.'],
-                default => ['type' => 'warn', 'message' => 'Feedback #' . $feedbackId . ' tersimpan, tetapi email notifikasi gagal dikirim.'],
+            $reason = trim((string) ($result['detail'] ?? $result['reason'] ?? ''));
+            $_SESSION['flash'] = match (true) {
+                $result['status'] === 'SENT' && ($result['reason'] ?? '') === 'sent_without_attachments'
+                    => ['type' => 'success', 'message' => 'Feedback #' . $feedbackId . ' terkirim ke developer, tetapi foto tidak ikut terlampir di email (ukuran terlalu besar). Foto tetap tersimpan.'],
+                $result['status'] === 'SENT'
+                    => ['type' => 'success', 'message' => 'Feedback #' . $feedbackId . ' berhasil dikirim ke developer.'],
+                $result['status'] === 'PENDING'
+                    => ['type' => 'warn', 'message' => 'Feedback #' . $feedbackId . ' tersimpan, tetapi email belum dikirim karena Brevo belum dikonfigurasi lengkap.'],
+                default
+                    => ['type' => 'warn', 'message' => 'Feedback #' . $feedbackId . ' tersimpan, tetapi email notifikasi gagal dikirim' . ($reason !== '' ? ' (' . $reason . ')' : '') . '.'],
             };
         } catch (DomainException $error) {
             if ($feedbackId === 0 && $storedPhotos !== []) {
